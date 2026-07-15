@@ -2,10 +2,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Deploys the deck_recurrence app from its git repository into a
-# docker-compose based Nextcloud. Safe by construction: the only paths
-# ever written inside the Nextcloud volume are
-# custom_apps/deck_recurrence (this app) — no other app, no config,
-# no compose files are touched.
+# docker-compose based Nextcloud.
+#
+# The frontend is built on the Ansible controller (needs Node >= 20.19),
+# then only the release files are pushed to the server — the server needs
+# no JS toolchain. Safe by construction: the only path ever written inside
+# the Nextcloud volume is custom_apps/deck_recurrence — no other app,
+# no config and no compose files are touched.
 #
 # Usage: ansible-playbook -i deploy/inventory.yml deploy/deploy.yml
 ---
@@ -15,37 +18,50 @@
     app_id: deck_recurrence
     repo_url: https://github.com/aktasfatih/deck_recurrence.git
     app_ref: main
-    build_dir: "{{ ansible_env.HOME }}/builds/{{ app_id }}"
-    stage_dir: "{{ ansible_env.HOME }}/builds/{{ app_id }}-dist"
+    controller_build_dir: "{{ lookup('env', 'HOME') }}/builds/{{ app_id }}"
+    controller_stage_dir: "{{ lookup('env', 'HOME') }}/builds/{{ app_id }}-dist"
+    remote_stage_dir: "builds/{{ app_id }}-dist"
     nextcloud_container: your-nextcloud-container
 
   tasks:
-    - name: Check out application source
+    - name: Check out application source on the controller
       ansible.builtin.git:
         repo: "{{ repo_url }}"
-        dest: "{{ build_dir }}"
+        dest: "{{ controller_build_dir }}"
         version: "{{ app_ref }}"
         force: true
+      delegate_to: localhost
 
-    - name: Install frontend dependencies
+    - name: Install frontend dependencies on the controller
       ansible.builtin.command: npm ci --no-audit --no-fund
       args:
-        chdir: "{{ build_dir }}"
+        chdir: "{{ controller_build_dir }}"
       changed_when: true
+      delegate_to: localhost
 
-    - name: Build frontend bundle
+    - name: Build frontend bundle on the controller
       ansible.builtin.command: npm run build
       args:
-        chdir: "{{ build_dir }}"
+        chdir: "{{ controller_build_dir }}"
       changed_when: true
+      delegate_to: localhost
 
     - name: Stage release files without development artifacts
       ansible.builtin.command: >
         rsync -a --delete
         --exclude .git --exclude node_modules --exclude src
         --exclude deploy --exclude tests --exclude cypress
-        {{ build_dir }}/ {{ stage_dir }}/{{ app_id }}/
+        {{ controller_build_dir }}/ {{ controller_stage_dir }}/{{ app_id }}/
       changed_when: true
+      delegate_to: localhost
+
+    - name: Push release files to the server
+      ansible.builtin.command: >
+        rsync -a --delete --mkpath
+        {{ controller_stage_dir }}/{{ app_id }}/
+        {{ inventory_hostname }}:{{ remote_stage_dir }}/{{ app_id }}/
+      changed_when: true
+      delegate_to: localhost
 
     - name: Remove leftover staging copy inside the container
       ansible.builtin.command: >
@@ -55,7 +71,7 @@
 
     - name: Copy app into the Nextcloud container
       ansible.builtin.command: >
-        docker cp {{ stage_dir }}/{{ app_id }}
+        docker cp {{ remote_stage_dir }}/{{ app_id }}
         {{ nextcloud_container }}:/tmp/{{ app_id }}.new
       changed_when: true
 
@@ -96,6 +112,6 @@
     - name: Verify the app is enabled
       ansible.builtin.assert:
         that:
-          - "app_id + ':' in app_list.stdout or app_id in app_list.stdout"
+          - app_id in app_list.stdout
         fail_msg: "{{ app_id }} does not appear in the enabled app list"
         success_msg: "{{ app_id }} is enabled"
