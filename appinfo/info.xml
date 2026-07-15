@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+	<id>deck_recurrence</id>
+	<name>Deck Recurrence</name>
+	<summary>Recurring cards for Deck</summary>
+	<description><![CDATA[
+Create Deck cards on a schedule. Define a template card and a recurrence rule
+(daily, weekly, monthly or any RFC 5545 RRULE) and Deck Recurrence will clone
+the template into the stack of your choice when each occurrence is due, with
+the due date set to the occurrence time. Labels, assignees and the description
+are carried over from the template.
+
+Requires the Deck app to be installed and enabled.
+	]]></description>
+	<version>0.1.0</version>
+	<licence>agpl</licence>
+	<author mail="akfatih2@gmail.com">Fatih AKTAS</author>
+	<namespace>DeckRecurrence</namespace>
+	<category>organization</category>
+	<bugs>https://github.com/aktasfatih/deck_recurrence/issues</bugs>
+	<repository type="git">https://github.com/aktasfatih/deck_recurrence.git</repository>
+	<dependencies>
+		<nextcloud min-version="30" max-version="32"/>
+	</dependencies>
+	<background-jobs>
+		<job>OCA\DeckRecurrence\Cron\SpawnRecurringCards</job>
+	</background-jobs>
+	<navigations>
+		<navigation>
+			<name>Deck Recurrence</name>
+			<route>deck_recurrence.page.index</route>
+			<icon>app.svg</icon>
+		</navigation>
+	</navigations>
+</info>
