@@ -1,0 +1,101 @@
+# SPDX-FileCopyrightText: 2026 Fatih AKTAS <akfatih2@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Deploys the deck_recurrence app from its git repository into a
+# docker-compose based Nextcloud. Safe by construction: the only paths
+# ever written inside the Nextcloud volume are
+# custom_apps/deck_recurrence (this app) — no other app, no config,
+# no compose files are touched.
+#
+# Usage: ansible-playbook -i deploy/inventory.yml deploy/deploy.yml
+---
+- name: Deploy Deck Recurrence to Nextcloud
+  hosts: nextcloud
+  vars:
+    app_id: deck_recurrence
+    repo_url: https://github.com/aktasfatih/deck_recurrence.git
+    app_ref: main
+    build_dir: "{{ ansible_env.HOME }}/builds/{{ app_id }}"
+    stage_dir: "{{ ansible_env.HOME }}/builds/{{ app_id }}-dist"
+    nextcloud_container: your-nextcloud-container
+
+  tasks:
+    - name: Check out application source
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ build_dir }}"
+        version: "{{ app_ref }}"
+        force: true
+
+    - name: Install frontend dependencies
+      ansible.builtin.command: npm ci --no-audit --no-fund
+      args:
+        chdir: "{{ build_dir }}"
+      changed_when: true
+
+    - name: Build frontend bundle
+      ansible.builtin.command: npm run build
+      args:
+        chdir: "{{ build_dir }}"
+      changed_when: true
+
+    - name: Stage release files without development artifacts
+      ansible.builtin.command: >
+        rsync -a --delete
+        --exclude .git --exclude node_modules --exclude src
+        --exclude deploy --exclude tests --exclude cypress
+        {{ build_dir }}/ {{ stage_dir }}/{{ app_id }}/
+      changed_when: true
+
+    - name: Remove leftover staging copy inside the container
+      ansible.builtin.command: >
+        docker exec {{ nextcloud_container }}
+        rm -rf /tmp/{{ app_id }}.new
+      changed_when: false
+
+    - name: Copy app into the Nextcloud container
+      ansible.builtin.command: >
+        docker cp {{ stage_dir }}/{{ app_id }}
+        {{ nextcloud_container }}:/tmp/{{ app_id }}.new
+      changed_when: true
+
+    - name: Give the app files to the web server user
+      ansible.builtin.command: >
+        docker exec {{ nextcloud_container }}
+        chown -R www-data:www-data /tmp/{{ app_id }}.new
+      changed_when: true
+
+    - name: Replace only this app's directory in custom_apps
+      ansible.builtin.command: >
+        docker exec {{ nextcloud_container }}
+        sh -c "rm -rf /var/www/html/custom_apps/{{ app_id }}
+        && mv /tmp/{{ app_id }}.new /var/www/html/custom_apps/{{ app_id }}"
+      changed_when: true
+
+    - name: Enable the app (runs its database migration)
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ app:enable {{ app_id }}
+      register: enable_result
+      changed_when: "'already enabled' not in enable_result.stdout"
+
+    - name: Run pending app upgrades
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ upgrade --no-interaction
+      register: upgrade_result
+      changed_when: "'already latest version' not in upgrade_result.stdout"
+
+    - name: Read enabled app list
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ app:list --enabled
+      register: app_list
+      changed_when: false
+
+    - name: Verify the app is enabled
+      ansible.builtin.assert:
+        that:
+          - "app_id + ':' in app_list.stdout or app_id in app_list.stdout"
+        fail_msg: "{{ app_id }} does not appear in the enabled app list"
+        success_msg: "{{ app_id }} is enabled"
