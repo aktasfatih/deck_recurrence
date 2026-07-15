@@ -7,9 +7,13 @@ declare(strict_types=1);
 
 namespace OCA\DeckRecurrence\Service;
 
+use OCA\Deck\Activity\ActivityManager;
+use OCA\Deck\Db\Acl;
+use OCA\Deck\Db\Card;
 use OCA\Deck\Db\CardMapper;
 use OCA\Deck\Db\ChangeHelper;
-use OCA\Deck\Service\CardService;
+use OCA\Deck\Db\LabelMapper;
+use OCA\Deck\Db\StackMapper;
 use OCA\Deck\Service\PermissionService;
 use OCA\DeckRecurrence\Db\RecurrenceRule;
 use OCA\DeckRecurrence\Db\RecurrenceRuleMapper;
@@ -20,10 +24,12 @@ use Sabre\VObject\Recur\RRuleIterator;
 class RecurrenceService {
 	public function __construct(
 		private RecurrenceRuleMapper $ruleMapper,
-		private CardService $cardService,
 		private CardMapper $cardMapper,
+		private StackMapper $stackMapper,
+		private LabelMapper $labelMapper,
 		private ChangeHelper $changeHelper,
 		private PermissionService $permissionService,
+		private ActivityManager $activityManager,
 		private IConfig $config,
 		private LoggerInterface $logger,
 	) {
@@ -47,23 +53,59 @@ class RecurrenceService {
 	}
 
 	/**
-	 * Clone the rule's template card into its target stack and stamp the
-	 * occurrence time as the new card's due date. Permission checks run as
-	 * the rule's owner, so revoked board access disables spawning naturally.
+	 * Copy the rule's template card into its target stack with the occurrence
+	 * time as due date. The copy is done through Deck's mappers rather than
+	 * CardService::cloneCard() because Deck's service layer assumes a logged-in
+	 * session for activity authorship, which does not exist under cron
+	 * (Deck's own background jobs use the mapper layer for the same reason).
+	 * Permission checks run as the rule's owner, so revoked board access
+	 * disables spawning naturally.
 	 *
 	 * @throws \OCA\Deck\NoPermissionException
 	 * @throws \OCP\AppFramework\Db\DoesNotExistException
 	 */
 	public function spawn(RecurrenceRule $rule): void {
 		$this->permissionService->setUserId($rule->getUserId());
+		$this->permissionService->checkPermission($this->cardMapper, $rule->getTemplateCardId(), Acl::PERMISSION_READ, $rule->getUserId());
+		$this->permissionService->checkPermission($this->stackMapper, $rule->getTargetStackId(), Acl::PERMISSION_EDIT, $rule->getUserId());
 
-		$card = $this->cardService->cloneCard($rule->getTemplateCardId(), $rule->getTargetStackId());
+		$template = $this->cardMapper->find($rule->getTemplateCardId());
 
-		$occurrence = $rule->getNextRun() ?? time();
-		$fresh = $this->cardMapper->find($card->getId());
-		$fresh->setDuedate(new \DateTime('@' . $occurrence));
-		$this->cardMapper->update($fresh);
+		$card = new Card();
+		$card->setTitle($template->getTitle());
+		$card->setStackId($rule->getTargetStackId());
+		$card->setType($template->getType());
+		$card->setOrder($template->getOrder());
+		$card->setOwner($rule->getUserId());
+		$card->setDescription($template->getDescription());
+		$card->setDuedate(new \DateTime('@' . ($rule->getNextRun() ?? time())));
+		$card = $this->cardMapper->insert($card);
+
+		// Labels are only copied when both stacks are on the same board;
+		// cross-board label cloning needs CardService and a user session.
+		$templateBoard = $this->cardMapper->findBoardId($template->getId());
+		$targetBoard = $this->stackMapper->findBoardId($rule->getTargetStackId());
+		if ($templateBoard !== null && $templateBoard === $targetBoard) {
+			foreach ($this->labelMapper->findAssignedLabelsForCard($template->getId()) as $label) {
+				$this->cardMapper->assignLabel($card->getId(), $label->getId());
+			}
+		}
+
 		$this->changeHelper->cardChanged($card->getId());
+
+		try {
+			$this->activityManager->triggerEvent(
+				ActivityManager::DECK_OBJECT_CARD,
+				$card,
+				ActivityManager::SUBJECT_CARD_CREATE,
+				[],
+				$rule->getUserId(),
+			);
+		} catch (\Throwable $e) {
+			$this->logger->debug('Deck Recurrence: could not record activity for card ' . $card->getId(), [
+				'exception' => $e,
+			]);
+		}
 	}
 
 	/**
