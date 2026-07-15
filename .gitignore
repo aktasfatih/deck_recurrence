@@ -3,3 +3,4 @@ js/
 css/
 *.tar.gz
 .DS_Store
+deploy/inventory.yml

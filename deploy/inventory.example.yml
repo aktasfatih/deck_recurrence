@@ -4,4 +4,4 @@ all:
   children:
     nextcloud:
       hosts:
-        your-server:
+        your-server:   # SSH host (alias from ~/.ssh/config) running the Nextcloud docker-compose stack
