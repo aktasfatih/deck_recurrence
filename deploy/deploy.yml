@@ -48,7 +48,7 @@
 
     - name: Stage release files without development artifacts
       ansible.builtin.command: >
-        rsync -a --delete
+        rsync -a --delete --mkpath
         --exclude .git --exclude node_modules --exclude src
         --exclude deploy --exclude tests --exclude cypress
         {{ controller_build_dir }}/ {{ controller_stage_dir }}/{{ app_id }}/
