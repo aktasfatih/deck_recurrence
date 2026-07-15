@@ -40,7 +40,7 @@
       delegate_to: localhost
 
     - name: Build frontend bundle on the controller
-      ansible.builtin.command: npm run build
+      ansible.builtin.command: sh -c 'rm -rf js css && npm run build'
       args:
         chdir: "{{ controller_build_dir }}"
       changed_when: true
@@ -101,6 +101,33 @@
         php occ upgrade --no-interaction
       register: upgrade_result
       changed_when: "'already latest version' not in upgrade_result.stdout"
+
+    # A version bump can be picked up with a short delay right after the
+    # files are replaced (cached appinfo), which would leave the instance
+    # in "update needed" mode and block the web UI. Re-check and re-run
+    # until the instance reports no pending upgrade.
+    - name: Read instance status
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ status --output json
+      register: status_result
+      changed_when: false
+
+    - name: Run upgrade again if one became pending
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ upgrade --no-interaction
+      when: (status_result.stdout | from_json).needsDbUpgrade
+      changed_when: true
+
+    - name: Verify no upgrade is pending
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ status --output json
+      register: final_status
+      changed_when: false
+      failed_when: (final_status.stdout | from_json).needsDbUpgrade
+        or (final_status.stdout | from_json).maintenance
 
     - name: Read enabled app list
       ansible.builtin.command: >
