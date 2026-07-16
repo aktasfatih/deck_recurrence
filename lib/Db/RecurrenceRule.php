@@ -28,6 +28,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setEnabled(bool $enabled)
  * @method bool getSkipIfOpen()
  * @method void setSkipIfOpen(bool $skipIfOpen)
+ * @method bool getResetCheckboxes()
+ * @method void setResetCheckboxes(bool $resetCheckboxes)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  */
@@ -41,6 +43,7 @@ class RecurrenceRule extends Entity implements \JsonSerializable {
 	protected ?int $lastRun = null;
 	protected bool $enabled = true;
 	protected bool $skipIfOpen = false;
+	protected bool $resetCheckboxes = false;
 	protected int $createdAt = 0;
 
 	public function __construct() {
@@ -51,6 +54,7 @@ class RecurrenceRule extends Entity implements \JsonSerializable {
 		$this->addType('lastRun', 'integer');
 		$this->addType('enabled', 'boolean');
 		$this->addType('skipIfOpen', 'boolean');
+		$this->addType('resetCheckboxes', 'boolean');
 		$this->addType('createdAt', 'integer');
 	}
 
@@ -65,6 +69,7 @@ class RecurrenceRule extends Entity implements \JsonSerializable {
 			'lastRun' => $this->getLastRun(),
 			'enabled' => $this->getEnabled(),
 			'skipIfOpen' => $this->getSkipIfOpen(),
+			'resetCheckboxes' => $this->getResetCheckboxes(),
 		];
 	}
 }

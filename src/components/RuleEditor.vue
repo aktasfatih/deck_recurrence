@@ -89,6 +89,9 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 			<NcCheckboxRadioSwitch v-model="skipIfOpen">
 				{{ t('deck_recurrence', 'Only create a new card when the previous one is done, archived or deleted') }}
 			</NcCheckboxRadioSwitch>
+			<NcCheckboxRadioSwitch v-model="resetCheckboxes">
+				{{ t('deck_recurrence', 'Uncheck all checklist items on the new card') }}
+			</NcCheckboxRadioSwitch>
 
 			<label for="rule-editor-first">{{ t('deck_recurrence', 'First occurrence') }}</label>
 			<NcDateTimePickerNative id="rule-editor-first"
@@ -160,6 +163,7 @@ export default {
 			until: null,
 			count: '10',
 			skipIfOpen: false,
+			resetCheckboxes: false,
 			firstOccurrence: new Date(),
 			saving: false,
 			frequencyOptions: [
@@ -199,6 +203,7 @@ export default {
 				this.until = parsed.until
 			}
 			this.skipIfOpen = this.rule.skipIfOpen ?? false
+			this.resetCheckboxes = this.rule.resetCheckboxes ?? false
 			this.firstOccurrence = new Date(this.rule.dtstart * 1000)
 			await this.preselectFromRule()
 		}
@@ -256,6 +261,7 @@ export default {
 					}),
 					dtstart: Math.floor(this.firstOccurrence.getTime() / 1000),
 					skipIfOpen: this.skipIfOpen,
+					resetCheckboxes: this.resetCheckboxes,
 				}
 				const saved = this.rule
 					? await api.updateRule({ ...payload, id: this.rule.id, enabled: this.rule.enabled })
@@ -293,6 +299,16 @@ export default {
 
 .rule-editor__interval {
 	max-width: 80px;
+}
+
+/* The field is already labelled by the surrounding sentence
+   ("Every … week(s)"); hide the input's own floating label. */
+.rule-editor__interval :deep(label) {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
 }
 
 .rule-editor__weekdays {

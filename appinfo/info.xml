@@ -13,7 +13,7 @@ are carried over from the template.
 
 Requires the Deck app to be installed and enabled.
 	]]></description>
-	<version>0.2.0</version>
+	<version>0.3.0</version>
 	<licence>agpl</licence>
 	<author mail="akfatih2@gmail.com">Fatih AKTAS</author>
 	<namespace>DeckRecurrence</namespace>

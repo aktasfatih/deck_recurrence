@@ -58,6 +58,12 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 							</td>
 							<td class="deck-recurrence__actions">
 								<NcActions>
+									<NcActionButton :close-after-click="true" @click="spawnNow(rule)">
+										<template #icon>
+											<CardPlusIcon :size="20" />
+										</template>
+										{{ t('deck_recurrence', 'Create card now') }}
+									</NcActionButton>
 									<NcActionButton @click="openEditor(rule)">
 										<template #icon>
 											<PencilIcon :size="20" />
@@ -87,7 +93,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 </template>
 
 <script>
-import { showError } from '@nextcloud/dialogs'
+import { showError, showSuccess } from '@nextcloud/dialogs'
 import { translate as t } from '@nextcloud/l10n'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActions from '@nextcloud/vue/components/NcActions'
@@ -98,6 +104,7 @@ import NcContent from '@nextcloud/vue/components/NcContent'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import AlertIcon from 'vue-material-design-icons/Alert.vue'
+import CardPlusIcon from 'vue-material-design-icons/CardPlus.vue'
 import DeleteIcon from 'vue-material-design-icons/Delete.vue'
 import PencilIcon from 'vue-material-design-icons/Pencil.vue'
 import PlusIcon from 'vue-material-design-icons/Plus.vue'
@@ -110,6 +117,7 @@ export default {
 	name: 'App',
 	components: {
 		AlertIcon,
+		CardPlusIcon,
 		DeleteIcon,
 		NcActionButton,
 		NcActions,
@@ -200,6 +208,15 @@ export default {
 				this.rules.unshift(rule)
 			}
 			this.editorOpen = false
+		},
+		async spawnNow(rule) {
+			try {
+				const card = await api.spawnRule(rule.id)
+				showSuccess(t('deck_recurrence', 'Card "{title}" created', { title: card.title }))
+			} catch (e) {
+				console.error(e)
+				showError(e.response?.data?.message ?? t('deck_recurrence', 'Could not create the card'))
+			}
 		},
 		async toggleRule(rule, enabled) {
 			try {

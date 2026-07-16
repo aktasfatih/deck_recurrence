@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 – unreleased
+
+### Added
+
+- "Create card now" action: stamp a card from the template on demand,
+  without waiting for the schedule (card templates use case)
+- Assignees of the template card are copied to spawned cards
+- Option to uncheck all checklist items on the new card
+- The rule owner gets a Nextcloud notification when a spawn fails
+  (deleted template card, lost board access)
+
+### Fixed
+
+- Stray floating label on the interval field in the rule editor
+
 ## 0.2.0 – unreleased
 
 ### Added

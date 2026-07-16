@@ -44,7 +44,7 @@ class RuleController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	public function create(int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $skipIfOpen = false): JSONResponse {
+	public function create(int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $skipIfOpen = false, bool $resetCheckboxes = false): JSONResponse {
 		$error = $this->validate($templateCardId, $targetStackId);
 		if ($error !== null) {
 			return $error;
@@ -58,6 +58,7 @@ class RuleController extends Controller {
 		$rule->setDtstart($dtstart);
 		$rule->setEnabled(true);
 		$rule->setSkipIfOpen($skipIfOpen);
+		$rule->setResetCheckboxes($resetCheckboxes);
 		$rule->setCreatedAt(time());
 
 		try {
@@ -73,7 +74,7 @@ class RuleController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	public function update(int $id, int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $enabled, bool $skipIfOpen = false): JSONResponse {
+	public function update(int $id, int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $enabled, bool $skipIfOpen = false, bool $resetCheckboxes = false): JSONResponse {
 		try {
 			$rule = $this->ruleMapper->find($id, $this->userId);
 		} catch (DoesNotExistException $e) {
@@ -91,6 +92,7 @@ class RuleController extends Controller {
 		$rule->setDtstart($dtstart);
 		$rule->setEnabled($enabled);
 		$rule->setSkipIfOpen($skipIfOpen);
+		$rule->setResetCheckboxes($resetCheckboxes);
 
 		try {
 			$rule->setNextRun($enabled
@@ -101,6 +103,23 @@ class RuleController extends Controller {
 		}
 
 		return new JSONResponse($this->ruleMapper->update($rule));
+	}
+
+	#[NoAdminRequired]
+	public function spawn(int $id): JSONResponse {
+		try {
+			$rule = $this->ruleMapper->find($id, $this->userId);
+		} catch (DoesNotExistException $e) {
+			return new JSONResponse(['message' => 'Rule not found'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			$card = $this->recurrenceService->spawn($rule, true);
+		} catch (NoPermissionException $e) {
+			return new JSONResponse(['message' => 'No permission for this card or stack'], Http::STATUS_FORBIDDEN);
+		} catch (DoesNotExistException $e) {
+			return new JSONResponse(['message' => 'The template card no longer exists'], Http::STATUS_NOT_FOUND);
+		}
+		return new JSONResponse($card);
 	}
 
 	#[NoAdminRequired]

@@ -11,6 +11,7 @@ return [
 		['name' => 'rule#index', 'url' => '/rules', 'verb' => 'GET'],
 		['name' => 'rule#create', 'url' => '/rules', 'verb' => 'POST'],
 		['name' => 'rule#update', 'url' => '/rules/{id}', 'verb' => 'PUT'],
+		['name' => 'rule#spawn', 'url' => '/rules/{id}/spawn', 'verb' => 'POST'],
 		['name' => 'rule#destroy', 'url' => '/rules/{id}', 'verb' => 'DELETE'],
 	],
 ];

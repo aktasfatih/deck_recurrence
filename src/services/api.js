@@ -20,6 +20,9 @@ export default {
 	async deleteRule(id) {
 		return (await axios.delete(rulesUrl('/' + id))).data
 	},
+	async spawnRule(id) {
+		return (await axios.post(rulesUrl('/' + id + '/spawn'))).data
+	},
 
 	async listBoards() {
 		return (await axios.get(deckUrl('/boards'), { headers: deckHeaders })).data
