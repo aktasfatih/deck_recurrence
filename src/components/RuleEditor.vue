@@ -43,12 +43,11 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 			<label>{{ t('deck_recurrence', 'Repeat') }}</label>
 			<div class="rule-editor__frequency">
 				<span>{{ t('deck_recurrence', 'Every') }}</span>
-				<NcTextField v-model="interval"
+				<input v-model="interval"
 					type="number"
 					min="1"
-					class="rule-editor__interval"
-					:label="t('deck_recurrence', 'Interval')"
-					:show-label="false" />
+					class="rule-editor__number"
+					:aria-label="t('deck_recurrence', 'Interval')">
 				<NcSelect v-model="frequency"
 					:options="frequencyOptions"
 					label="label"
@@ -85,12 +84,11 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 					:label="t('deck_recurrence', 'Last day')"
 					:hide-label="true" />
 				<div v-if="ends === 'count'" class="rule-editor__count">
-					<NcTextField v-model="count"
+					<input v-model="count"
 						type="number"
 						min="1"
-						class="rule-editor__interval"
-						:label="t('deck_recurrence', 'Occurrences')"
-						:show-label="false" />
+						class="rule-editor__number"
+						:aria-label="t('deck_recurrence', 'Occurrences')">
 					<span>{{ t('deck_recurrence', 'occurrences') }}</span>
 				</div>
 			</div>
@@ -133,7 +131,6 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcDateTimePickerNative from '@nextcloud/vue/components/NcDateTimePickerNative'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
-import NcTextField from '@nextcloud/vue/components/NcTextField'
 import api from '../services/api.js'
 import { buildRrule, parseRrule, WEEKDAYS } from '../services/rrule.js'
 
@@ -145,7 +142,6 @@ export default {
 		NcDateTimePickerNative,
 		NcDialog,
 		NcSelect,
-		NcTextField,
 	},
 	props: {
 		rule: {
@@ -310,36 +306,25 @@ export default {
 	gap: 8px;
 }
 
-/* Line the interval field up with the select next to it: strip the
-   select's own vertical margin and give both the same control height. */
 .rule-editor__frequency :deep(.v-select.select),
 .rule-editor__count :deep(.v-select.select) {
 	margin: 0;
 }
 
-/* Line the interval field up with the select beside it: the component
-   root (NcTextField = .input-field) reserves 6px label space on top and
-   the server forces input heights with !important, so both the root and
-   the input are pinned to the select's rendered box (32px min-height
-   plus its 2x2px border). */
-.rule-editor__interval {
-	max-width: 80px;
-	margin: 0 !important;
+/* A plain input styled with NcSelect's own box tokens, so the two
+   controls in the row share identical geometry by construction.
+   (NcTextField carries label spacing that cannot be aligned cleanly
+   against NcSelect.) The height override needs !important because
+   server CSS forces input heights. */
+.rule-editor__number {
+	width: 80px;
 	height: calc(var(--default-clickable-area) + 2px) !important;
-}
-
-.rule-editor__interval :deep(input) {
-	height: calc(var(--default-clickable-area) + 2px) !important;
-}
-
-/* The field is already labelled by the surrounding sentence
-   ("Every … week(s)"); hide the input's own floating label. */
-.rule-editor__interval :deep(label) {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	overflow: hidden;
-	clip-path: inset(50%);
+	margin: 0;
+	padding-inline: 12px;
+	border: 1px solid var(--color-border-maxcontrast);
+	border-radius: var(--border-radius-element, 8px);
+	background-color: transparent;
+	font-size: inherit;
 }
 
 .rule-editor__weekdays {
