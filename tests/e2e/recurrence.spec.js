@@ -57,6 +57,17 @@ const row = (page, text) => page.getByRole('row').filter({ hasText: text })
 test('create a rule through the editor', async ({ page }) => {
 	await page.getByRole('button', { name: 'New rule' }).click()
 
+	// The interval field must line up with the frequency select (regression
+	// check for the misaligned "Repeat" row).
+	const boxes = await page.evaluate(() => {
+		const input = document.querySelector('.rule-editor__interval')
+		const select = document.querySelector('.rule-editor__frequency .v-select')
+		const r = (el) => el.getBoundingClientRect()
+		return { input: r(input), select: r(select) }
+	})
+	expect(Math.abs(boxes.input.top - boxes.select.top)).toBeLessThanOrEqual(2)
+	expect(Math.abs(boxes.input.height - boxes.select.height)).toBeLessThanOrEqual(2)
+
 	await page.getByRole('combobox', { name: 'Select a board' }).click()
 	await option(page, 'E2E Chores').click()
 	await page.getByRole('combobox', { name: 'Card to copy each time' }).click()

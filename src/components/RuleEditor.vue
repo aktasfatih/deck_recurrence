@@ -310,8 +310,26 @@ export default {
 	gap: 8px;
 }
 
+/* Line the interval field up with the select next to it: strip the
+   select's own vertical margin and give both the same control height. */
+.rule-editor__frequency :deep(.v-select.select),
+.rule-editor__count :deep(.v-select.select) {
+	margin: 0;
+}
+
+/* Line the interval field up with the select beside it: the component
+   root (NcTextField = .input-field) reserves 6px label space on top and
+   the server forces input heights with !important, so both the root and
+   the input are pinned to the select's rendered box (32px min-height
+   plus its 2x2px border). */
 .rule-editor__interval {
 	max-width: 80px;
+	margin: 0 !important;
+	height: calc(var(--default-clickable-area) + 2px) !important;
+}
+
+.rule-editor__interval :deep(input) {
+	height: calc(var(--default-clickable-area) + 2px) !important;
 }
 
 /* The field is already labelled by the surrounding sentence

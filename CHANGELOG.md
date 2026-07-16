@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2 – unreleased
+
+### Fixed
+
+- The interval field in the "Repeat" row now lines up with the
+  frequency select next to it (covered by an e2e regression check)
+
 ## 0.4.0 – unreleased
 
 ### Added
