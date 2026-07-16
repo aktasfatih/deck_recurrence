@@ -2,8 +2,17 @@
 
 ## 0.4.4 – unreleased
 
+### Added
+
+- PHP unit tests for the recurrence engine (DST boundaries, COUNT/UNTIL
+  exhaustion, invalid rules, timezone fallback)
+- e2e tests for editing reset rules, migration replay from the 0.1.0
+  schema, and shared-board rules including access revocation
+
 ### Fixed
 
+- Creating a rule with an unparseable recurrence rule returned a server
+  error instead of a validation message
 - The interval field in the "Repeat" row now lines up with the
   frequency select next to it (covered by an e2e regression check)
 
