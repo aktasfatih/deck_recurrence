@@ -59,6 +59,10 @@ export const deck = {
 		api('POST', `/index.php/apps/deck/api/v1.0/boards/${boardId}/stacks/${stackId}/cards`, card),
 	assignUser: (boardId, stackId, cardId, userId) =>
 		api('PUT', `/index.php/apps/deck/api/v1.0/boards/${boardId}/stacks/${stackId}/cards/${cardId}/assignUser`, { userId }),
+	createLabel: (boardId, title, color) =>
+		api('POST', `/index.php/apps/deck/api/v1.0/boards/${boardId}/labels`, { title, color }),
+	assignLabel: (boardId, stackId, cardId, labelId) =>
+		api('PUT', `/index.php/apps/deck/api/v1.0/boards/${boardId}/stacks/${stackId}/cards/${cardId}/assignLabel`, { labelId }),
 	listStacks: (boardId) => api('GET', `/index.php/apps/deck/api/v1.0/boards/${boardId}/stacks`),
 }
 

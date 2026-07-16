@@ -54,7 +54,13 @@ class RecurrenceService {
 	public function nextOccurrence(RecurrenceRule $rule, \DateTimeInterface $after): ?int {
 		$timezone = $this->timezoneFor($rule->getUserId());
 		$start = (new \DateTimeImmutable('@' . $rule->getDtstart()))->setTimezone($timezone);
-		$iterator = new RRuleIterator($rule->getRrule(), $start);
+		try {
+			$iterator = new RRuleIterator($rule->getRrule(), $start);
+		} catch (\Exception $e) {
+			// sabre throws different exception types per defect; normalize so
+			// callers can rely on the documented InvalidArgumentException
+			throw new \InvalidArgumentException($e->getMessage(), 0, $e);
+		}
 		$iterator->fastForward(\DateTimeImmutable::createFromInterface($after));
 		if (!$iterator->valid()) {
 			return null;
