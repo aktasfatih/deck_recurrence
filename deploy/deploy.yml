@@ -6,9 +6,13 @@
 #
 # The frontend is built on the Ansible controller (needs Node >= 20.19),
 # then only the release files are pushed to the server — the server needs
-# no JS toolchain. Safe by construction: the only path ever written inside
-# the Nextcloud volume is custom_apps/deck_recurrence — no other app,
-# no config and no compose files are touched.
+# no JS toolchain.
+#
+# Scope guarantee: every write is limited to this app. Files only ever
+# land in custom_apps/deck_recurrence, and the only occ commands used are
+# app-scoped (app:disable/app:enable/migrations:migrate for this app id).
+# No global `occ upgrade`, no App Store access, no container restarts.
+# The app is disabled for the few seconds while its files are swapped.
 #
 # Usage: ansible-playbook -i deploy/inventory.yml deploy/deploy.yml
 ---
@@ -22,7 +26,6 @@
     controller_stage_dir: "{{ lookup('env', 'HOME') }}/builds/{{ app_id }}-dist"
     remote_stage_dir: "builds/{{ app_id }}-dist"
     nextcloud_container: your-nextcloud-container
-    nextcloud_port: 4000
 
   tasks:
     - name: Check out application source on the controller
@@ -31,6 +34,13 @@
         dest: "{{ controller_build_dir }}"
         version: "{{ app_ref }}"
         force: true
+      delegate_to: localhost
+
+    - name: Read the app version being deployed
+      ansible.builtin.command: >
+        grep -oP '<version>\K[^<]+' {{ controller_build_dir }}/appinfo/info.xml
+      register: app_version
+      changed_when: false
       delegate_to: localhost
 
     - name: Install frontend dependencies on the controller
@@ -82,6 +92,16 @@
         chown -R www-data:www-data /tmp/{{ app_id }}.new
       changed_when: true
 
+    - name: Disable the app while its files are swapped
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ app:disable {{ app_id }}
+      register: disable_result
+      changed_when: "'disabled' in disable_result.stdout"
+      failed_when: >
+        disable_result.rc != 0
+        and 'No such app' not in disable_result.stdout + disable_result.stderr
+
     - name: Replace only this app's directory in custom_apps
       ansible.builtin.command: >
         docker exec {{ nextcloud_container }}
@@ -89,73 +109,38 @@
         && mv /tmp/{{ app_id }}.new /var/www/html/custom_apps/{{ app_id }}"
       changed_when: true
 
-    # occ upgrade also pulls pending App Store updates for every other
-    # installed app, which must never happen as a side effect of deploying
-    # this app. The store is switched off around the upgrade and restored
-    # afterwards even if a step fails.
-    - name: Run app upgrade with the app store disabled
-      block:
-        - name: Temporarily disable the app store
-          ansible.builtin.command: >
-            docker exec -u www-data {{ nextcloud_container }}
-            php occ config:system:set appstoreenabled --type=boolean --value=false
-          changed_when: true
-
-        - name: Enable the app (runs its database migration)
-          ansible.builtin.command: >
-            docker exec -u www-data {{ nextcloud_container }}
-            php occ app:enable {{ app_id }}
-          register: enable_result
-          changed_when: "'already enabled' not in enable_result.stdout"
-
-        - name: Run pending app upgrades
-          ansible.builtin.command: >
-            docker exec -u www-data {{ nextcloud_container }}
-            php occ upgrade --no-interaction
-          register: upgrade_result
-          changed_when: "'already latest version' not in upgrade_result.stdout"
-
-        # A version bump can be picked up with a short delay right after
-        # the files are replaced (cached appinfo), which would leave the
-        # instance in "update needed" mode and block the web UI.
-        - name: Read instance status
-          ansible.builtin.command: >
-            docker exec -u www-data {{ nextcloud_container }}
-            php occ status --output json
-          register: status_result
-          changed_when: false
-
-        - name: Run upgrade again if one became pending
-          ansible.builtin.command: >
-            docker exec -u www-data {{ nextcloud_container }}
-            php occ upgrade --no-interaction
-          when: (status_result.stdout | from_json).needsDbUpgrade
-          changed_when: true
-      always:
-        - name: Restore the app store setting
-          ansible.builtin.command: >
-            docker exec -u www-data {{ nextcloud_container }}
-            php occ config:system:delete appstoreenabled
-          changed_when: true
-
-    # CLI upgrades leave the web workers' PHP caches (APCu) stale, which
-    # has broken request routing before. Restart after any actual upgrade.
-    - name: Restart Nextcloud to clear web worker caches
-      ansible.builtin.command: docker restart {{ nextcloud_container }}
-      when: upgrade_result is changed or enable_result is changed
+    - name: Enable the app (runs its pending migrations)
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ app:enable {{ app_id }}
+      register: enable_result
       changed_when: true
 
-    - name: Wait for Nextcloud to come back
+    - name: Read instance status
       ansible.builtin.command: >
-        curl -sf -o /dev/null http://localhost:{{ nextcloud_port }}/status.php
-      when: upgrade_result is changed or enable_result is changed
-      register: health
-      until: health.rc == 0
-      retries: 18
-      delay: 10
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ status --output json
+      register: status_result
       changed_when: false
 
-    - name: Verify no upgrade is pending
+    # If enabling did not sync the recorded app version, do exactly what
+    # a global upgrade would have done for this app — but scoped to it.
+    - name: Run this app's migrations explicitly if an upgrade is pending
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ migrations:migrate {{ app_id }}
+      when: (status_result.stdout | from_json).needsDbUpgrade
+      changed_when: true
+
+    - name: Sync this app's recorded version if an upgrade is pending
+      ansible.builtin.command: >
+        docker exec -u www-data {{ nextcloud_container }}
+        php occ config:app:set {{ app_id }} installed_version
+        --value {{ app_version.stdout | trim }}
+      when: (status_result.stdout | from_json).needsDbUpgrade
+      changed_when: true
+
+    - name: Verify the instance reports no pending upgrade
       ansible.builtin.command: >
         docker exec -u www-data {{ nextcloud_container }}
         php occ status --output json
@@ -171,9 +156,10 @@
       register: app_list
       changed_when: false
 
-    - name: Verify the app is enabled
+    - name: Verify the app is enabled at the deployed version
       ansible.builtin.assert:
         that:
           - app_id in app_list.stdout
-        fail_msg: "{{ app_id }} does not appear in the enabled app list"
-        success_msg: "{{ app_id }} is enabled"
+          - app_version.stdout | trim in app_list.stdout
+        fail_msg: "{{ app_id }} {{ app_version.stdout | trim }} is not in the enabled app list"
+        success_msg: "{{ app_id }} {{ app_version.stdout | trim }} is enabled"
