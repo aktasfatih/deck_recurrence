@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 – unreleased
+
+### Fixed
+
+- Unauthenticated requests to the OCS API returned an empty 200 instead
+  of 401 (guest requests crashed controller construction)
+
 ## 0.5.0 – unreleased
 
 ### Added

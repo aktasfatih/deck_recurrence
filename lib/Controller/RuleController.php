@@ -22,7 +22,9 @@ class RuleController extends Controller {
 		string $appName,
 		IRequest $request,
 		private RuleService $ruleService,
-		private string $userId,
+		// null for guests: construction happens before the auth middleware
+		// rejects them, so this must not be a hard string
+		private ?string $userId,
 	) {
 		parent::__construct($appName, $request);
 	}

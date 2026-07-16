@@ -29,6 +29,13 @@ test.afterAll(async () => {
 	}
 })
 
+test('rejects unauthenticated requests with 401', async () => {
+	const response = await fetch('http://localhost:8890/ocs/v2.php/apps/deck_recurrence/api/v1/rules?format=json', {
+		headers: { 'OCS-APIRequest': 'true', Accept: 'application/json' },
+	})
+	expect(response.status).toBe(401)
+})
+
 test('creates a rule', async () => {
 	const { status, data } = await ocs('POST', '/api/v1/rules', {
 		templateCardId: cardId,
