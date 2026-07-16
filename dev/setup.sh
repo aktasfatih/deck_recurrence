@@ -28,6 +28,8 @@ docker exec deck_recurrence-dev chown www-data:www-data /var/www/html/custom_app
 $OCC app:install deck 2>/dev/null || $OCC app:enable deck
 $OCC app:enable deck_recurrence
 $OCC background:cron
+# The welcome wizard overlays the page and blocks automated UI tests
+$OCC app:disable firstrunwizard
 
 echo
 echo "Ready: http://localhost:8890  (admin / admin)"
