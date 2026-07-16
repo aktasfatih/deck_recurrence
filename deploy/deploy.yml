@@ -22,6 +22,7 @@
     controller_stage_dir: "{{ lookup('env', 'HOME') }}/builds/{{ app_id }}-dist"
     remote_stage_dir: "builds/{{ app_id }}-dist"
     nextcloud_container: your-nextcloud-container
+    nextcloud_port: 4000
 
   tasks:
     - name: Check out application source on the controller
@@ -88,37 +89,71 @@
         && mv /tmp/{{ app_id }}.new /var/www/html/custom_apps/{{ app_id }}"
       changed_when: true
 
-    - name: Enable the app (runs its database migration)
-      ansible.builtin.command: >
-        docker exec -u www-data {{ nextcloud_container }}
-        php occ app:enable {{ app_id }}
-      register: enable_result
-      changed_when: "'already enabled' not in enable_result.stdout"
+    # occ upgrade also pulls pending App Store updates for every other
+    # installed app, which must never happen as a side effect of deploying
+    # this app. The store is switched off around the upgrade and restored
+    # afterwards even if a step fails.
+    - name: Run app upgrade with the app store disabled
+      block:
+        - name: Temporarily disable the app store
+          ansible.builtin.command: >
+            docker exec -u www-data {{ nextcloud_container }}
+            php occ config:system:set appstoreenabled --type=boolean --value=false
+          changed_when: true
 
-    - name: Run pending app upgrades
-      ansible.builtin.command: >
-        docker exec -u www-data {{ nextcloud_container }}
-        php occ upgrade --no-interaction
-      register: upgrade_result
-      changed_when: "'already latest version' not in upgrade_result.stdout"
+        - name: Enable the app (runs its database migration)
+          ansible.builtin.command: >
+            docker exec -u www-data {{ nextcloud_container }}
+            php occ app:enable {{ app_id }}
+          register: enable_result
+          changed_when: "'already enabled' not in enable_result.stdout"
 
-    # A version bump can be picked up with a short delay right after the
-    # files are replaced (cached appinfo), which would leave the instance
-    # in "update needed" mode and block the web UI. Re-check and re-run
-    # until the instance reports no pending upgrade.
-    - name: Read instance status
-      ansible.builtin.command: >
-        docker exec -u www-data {{ nextcloud_container }}
-        php occ status --output json
-      register: status_result
-      changed_when: false
+        - name: Run pending app upgrades
+          ansible.builtin.command: >
+            docker exec -u www-data {{ nextcloud_container }}
+            php occ upgrade --no-interaction
+          register: upgrade_result
+          changed_when: "'already latest version' not in upgrade_result.stdout"
 
-    - name: Run upgrade again if one became pending
-      ansible.builtin.command: >
-        docker exec -u www-data {{ nextcloud_container }}
-        php occ upgrade --no-interaction
-      when: (status_result.stdout | from_json).needsDbUpgrade
+        # A version bump can be picked up with a short delay right after
+        # the files are replaced (cached appinfo), which would leave the
+        # instance in "update needed" mode and block the web UI.
+        - name: Read instance status
+          ansible.builtin.command: >
+            docker exec -u www-data {{ nextcloud_container }}
+            php occ status --output json
+          register: status_result
+          changed_when: false
+
+        - name: Run upgrade again if one became pending
+          ansible.builtin.command: >
+            docker exec -u www-data {{ nextcloud_container }}
+            php occ upgrade --no-interaction
+          when: (status_result.stdout | from_json).needsDbUpgrade
+          changed_when: true
+      always:
+        - name: Restore the app store setting
+          ansible.builtin.command: >
+            docker exec -u www-data {{ nextcloud_container }}
+            php occ config:system:delete appstoreenabled
+          changed_when: true
+
+    # CLI upgrades leave the web workers' PHP caches (APCu) stale, which
+    # has broken request routing before. Restart after any actual upgrade.
+    - name: Restart Nextcloud to clear web worker caches
+      ansible.builtin.command: docker restart {{ nextcloud_container }}
+      when: upgrade_result is changed or enable_result is changed
       changed_when: true
+
+    - name: Wait for Nextcloud to come back
+      ansible.builtin.command: >
+        curl -sf -o /dev/null http://localhost:{{ nextcloud_port }}/status.php
+      when: upgrade_result is changed or enable_result is changed
+      register: health
+      until: health.rc == 0
+      retries: 18
+      delay: 10
+      changed_when: false
 
     - name: Verify no upgrade is pending
       ansible.builtin.command: >
