@@ -81,6 +81,10 @@ class RecurrenceService {
 	 * @throws \OCP\AppFramework\Db\DoesNotExistException
 	 */
 	public function spawn(RecurrenceRule $rule, bool $manual = false): ?Card {
+		if ($rule->getMode() === RecurrenceRule::MODE_RESET) {
+			return $this->resetCard($rule, $manual);
+		}
+
 		if (!$manual && $rule->getSkipIfOpen()) {
 			$latest = $this->spawnMapper->findLatestForRule($rule->getId());
 			if ($latest !== null && $this->isCardOpen($latest->getCardId())) {
@@ -98,7 +102,7 @@ class RecurrenceService {
 
 		$description = $template->getDescription();
 		if ($rule->getResetCheckboxes() && $description !== null) {
-			$description = preg_replace('/^(\s*[-*+]\s+)\[[xX]\]/m', '$1[ ]', $description);
+			$description = $this->uncheckAll($description);
 		}
 
 		$card = new Card();
@@ -167,6 +171,44 @@ class RecurrenceService {
 		}
 
 		return $card;
+	}
+
+	/**
+	 * Reset mode: the rule's card is the one and only working card. Each
+	 * occurrence moves it back to the target stack, clears its done state,
+	 * unarchives it and re-arms the due date (deck#6058 household style).
+	 * Manual resets leave the due date untouched.
+	 */
+	private function resetCard(RecurrenceRule $rule, bool $manual): Card {
+		$this->permissionService->setUserId($rule->getUserId());
+		$this->permissionService->checkPermission($this->cardMapper, $rule->getTemplateCardId(), Acl::PERMISSION_EDIT, $rule->getUserId());
+		$this->permissionService->checkPermission($this->stackMapper, $rule->getTargetStackId(), Acl::PERMISSION_EDIT, $rule->getUserId());
+
+		$card = $this->cardMapper->find($rule->getTemplateCardId());
+		$card->setStackId($rule->getTargetStackId());
+		$card->setDone(null);
+		$card->setArchived(false);
+		if ($rule->getResetCheckboxes() && $card->getDescription() !== null) {
+			$card->setDescription($this->uncheckAll($card->getDescription()));
+		}
+		if (!$manual) {
+			$card->setDuedate(new \DateTime('@' . ($rule->getNextRun() ?? time())));
+			$card->setNotified(false);
+		}
+		$card = $this->cardMapper->update($card);
+		$this->changeHelper->cardChanged($card->getId());
+
+		$spawnRecord = new RecurrenceSpawn();
+		$spawnRecord->setRuleId($rule->getId());
+		$spawnRecord->setCardId($card->getId());
+		$spawnRecord->setSpawnedAt(time());
+		$this->spawnMapper->insert($spawnRecord);
+
+		return $card;
+	}
+
+	private function uncheckAll(string $description): string {
+		return preg_replace('/^(\s*[-*+]\s+)\[[xX]\]/m', '$1[ ]', $description);
 	}
 
 	/**

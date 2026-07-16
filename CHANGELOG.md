@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 – unreleased
+
+### Added
+
+- Reset mode: instead of cloning a template, a rule can move the same
+  card back to a stack on schedule, clearing its done state and
+  re-arming the due date (household chores workflow)
+- Full UI-driven end-to-end coverage: editing rules, pausing via the
+  active switch, reset mode, error paths and deletion; the suite now
+  cleans up after itself
+
+### Fixed
+
+- "Create card now" on a rule whose template card was deleted showed a
+  misleading permission error; it now says the template no longer exists
+
 ## 0.3.0 – unreleased
 
 ### Added

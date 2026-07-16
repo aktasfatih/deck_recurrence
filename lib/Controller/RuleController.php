@@ -44,8 +44,8 @@ class RuleController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	public function create(int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $skipIfOpen = false, bool $resetCheckboxes = false): JSONResponse {
-		$error = $this->validate($templateCardId, $targetStackId);
+	public function create(int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $skipIfOpen = false, bool $resetCheckboxes = false, string $mode = RecurrenceRule::MODE_CLONE): JSONResponse {
+		$error = $this->validate($templateCardId, $targetStackId, $mode);
 		if ($error !== null) {
 			return $error;
 		}
@@ -59,6 +59,7 @@ class RuleController extends Controller {
 		$rule->setEnabled(true);
 		$rule->setSkipIfOpen($skipIfOpen);
 		$rule->setResetCheckboxes($resetCheckboxes);
+		$rule->setMode($mode);
 		$rule->setCreatedAt(time());
 
 		try {
@@ -74,14 +75,14 @@ class RuleController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	public function update(int $id, int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $enabled, bool $skipIfOpen = false, bool $resetCheckboxes = false): JSONResponse {
+	public function update(int $id, int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $enabled, bool $skipIfOpen = false, bool $resetCheckboxes = false, string $mode = RecurrenceRule::MODE_CLONE): JSONResponse {
 		try {
 			$rule = $this->ruleMapper->find($id, $this->userId);
 		} catch (DoesNotExistException $e) {
 			return new JSONResponse(['message' => 'Rule not found'], Http::STATUS_NOT_FOUND);
 		}
 
-		$error = $this->validate($templateCardId, $targetStackId);
+		$error = $this->validate($templateCardId, $targetStackId, $mode);
 		if ($error !== null) {
 			return $error;
 		}
@@ -93,6 +94,7 @@ class RuleController extends Controller {
 		$rule->setEnabled($enabled);
 		$rule->setSkipIfOpen($skipIfOpen);
 		$rule->setResetCheckboxes($resetCheckboxes);
+		$rule->setMode($mode);
 
 		try {
 			$rule->setNextRun($enabled
@@ -111,6 +113,14 @@ class RuleController extends Controller {
 			$rule = $this->ruleMapper->find($id, $this->userId);
 		} catch (DoesNotExistException $e) {
 			return new JSONResponse(['message' => 'Rule not found'], Http::STATUS_NOT_FOUND);
+		}
+		// Deck reports missing cards as "no permission" to avoid leaking
+		// their existence, but this rule is the requester's own — tell them
+		// their template is gone instead.
+		try {
+			$this->cardMapper->find($rule->getTemplateCardId());
+		} catch (DoesNotExistException $e) {
+			return new JSONResponse(['message' => 'The template card no longer exists'], Http::STATUS_NOT_FOUND);
 		}
 		try {
 			$card = $this->recurrenceService->spawn($rule, true);
@@ -133,9 +143,14 @@ class RuleController extends Controller {
 		return new JSONResponse($this->ruleMapper->delete($rule));
 	}
 
-	private function validate(int $templateCardId, int $targetStackId): ?JSONResponse {
+	private function validate(int $templateCardId, int $targetStackId, string $mode): ?JSONResponse {
+		if (!in_array($mode, [RecurrenceRule::MODE_CLONE, RecurrenceRule::MODE_RESET], true)) {
+			return new JSONResponse(['message' => 'Invalid rule mode'], Http::STATUS_BAD_REQUEST);
+		}
+		// Reset mode rewrites the card itself, so it needs edit rights on it
+		$cardPermission = $mode === RecurrenceRule::MODE_RESET ? Acl::PERMISSION_EDIT : Acl::PERMISSION_READ;
 		try {
-			$this->permissionService->checkPermission($this->cardMapper, $templateCardId, Acl::PERMISSION_READ);
+			$this->permissionService->checkPermission($this->cardMapper, $templateCardId, $cardPermission);
 			$this->permissionService->checkPermission($this->stackMapper, $targetStackId, Acl::PERMISSION_EDIT);
 		} catch (NoPermissionException $e) {
 			return new JSONResponse(['message' => 'No permission for this card or stack'], Http::STATUS_FORBIDDEN);

@@ -1,6 +1,6 @@
 {
   "name": "deck_recurrence",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Recurring cards for Nextcloud Deck",
   "license": "AGPL-3.0-or-later",
   "private": true,

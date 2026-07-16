@@ -30,10 +30,15 @@ use OCP\AppFramework\Db\Entity;
  * @method void setSkipIfOpen(bool $skipIfOpen)
  * @method bool getResetCheckboxes()
  * @method void setResetCheckboxes(bool $resetCheckboxes)
+ * @method string getMode()
+ * @method void setMode(string $mode)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  */
 class RecurrenceRule extends Entity implements \JsonSerializable {
+	public const MODE_CLONE = 'clone';
+	public const MODE_RESET = 'reset';
+
 	protected string $userId = '';
 	protected int $templateCardId = 0;
 	protected int $targetStackId = 0;
@@ -44,6 +49,7 @@ class RecurrenceRule extends Entity implements \JsonSerializable {
 	protected bool $enabled = true;
 	protected bool $skipIfOpen = false;
 	protected bool $resetCheckboxes = false;
+	protected string $mode = self::MODE_CLONE;
 	protected int $createdAt = 0;
 
 	public function __construct() {
@@ -70,6 +76,7 @@ class RecurrenceRule extends Entity implements \JsonSerializable {
 			'enabled' => $this->getEnabled(),
 			'skipIfOpen' => $this->getSkipIfOpen(),
 			'resetCheckboxes' => $this->getResetCheckboxes(),
+			'mode' => $this->getMode(),
 		];
 	}
 }

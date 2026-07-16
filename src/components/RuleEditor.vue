@@ -7,6 +7,16 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 		size="normal"
 		@closing="$emit('close')">
 		<div class="rule-editor">
+			<label>{{ t('deck_recurrence', 'Type') }}</label>
+			<div class="rule-editor__ends">
+				<NcCheckboxRadioSwitch v-model="mode" value="clone" name="mode" type="radio">
+					{{ t('deck_recurrence', 'Create a new card from a template') }}
+				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch v-model="mode" value="reset" name="mode" type="radio">
+					{{ t('deck_recurrence', 'Move the same card back') }}
+				</NcCheckboxRadioSwitch>
+			</div>
+
 			<label>{{ t('deck_recurrence', 'Board') }}</label>
 			<NcSelect v-model="board"
 				:options="boards"
@@ -14,15 +24,15 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 				:placeholder="t('deck_recurrence', 'Select a board')"
 				@update:model-value="onBoardChange" />
 
-			<label>{{ t('deck_recurrence', 'Template card') }}</label>
+			<label>{{ mode === 'reset' ? t('deck_recurrence', 'Card') : t('deck_recurrence', 'Template card') }}</label>
 			<NcSelect v-model="templateCard"
 				:options="cards"
 				label="title"
 				:disabled="!board"
 				:loading="loadingStacks"
-				:placeholder="t('deck_recurrence', 'Card to copy each time')" />
+				:placeholder="mode === 'reset' ? t('deck_recurrence', 'Card to move each time') : t('deck_recurrence', 'Card to copy each time')" />
 
-			<label>{{ t('deck_recurrence', 'Create new cards in') }}</label>
+			<label>{{ mode === 'reset' ? t('deck_recurrence', 'Move the card to') : t('deck_recurrence', 'Create new cards in') }}</label>
 			<NcSelect v-model="targetStack"
 				:options="stacks"
 				label="title"
@@ -86,7 +96,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 			</div>
 
 			<label>{{ t('deck_recurrence', 'Options') }}</label>
-			<NcCheckboxRadioSwitch v-model="skipIfOpen">
+			<NcCheckboxRadioSwitch v-if="mode === 'clone'" v-model="skipIfOpen">
 				{{ t('deck_recurrence', 'Only create a new card when the previous one is done, archived or deleted') }}
 			</NcCheckboxRadioSwitch>
 			<NcCheckboxRadioSwitch v-model="resetCheckboxes">
@@ -151,6 +161,7 @@ export default {
 	data() {
 		return {
 			WEEKDAYS,
+			mode: 'clone',
 			board: null,
 			stacks: [],
 			templateCard: null,
@@ -202,6 +213,7 @@ export default {
 				this.ends = 'until'
 				this.until = parsed.until
 			}
+			this.mode = this.rule.mode ?? 'clone'
 			this.skipIfOpen = this.rule.skipIfOpen ?? false
 			this.resetCheckboxes = this.rule.resetCheckboxes ?? false
 			this.firstOccurrence = new Date(this.rule.dtstart * 1000)
@@ -260,8 +272,9 @@ export default {
 						until: this.ends === 'until' ? this.until : null,
 					}),
 					dtstart: Math.floor(this.firstOccurrence.getTime() / 1000),
-					skipIfOpen: this.skipIfOpen,
+					skipIfOpen: this.mode === 'clone' && this.skipIfOpen,
 					resetCheckboxes: this.resetCheckboxes,
+					mode: this.mode,
 				}
 				const saved = this.rule
 					? await api.updateRule({ ...payload, id: this.rule.id, enabled: this.rule.enabled })

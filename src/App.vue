@@ -62,7 +62,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 										<template #icon>
 											<CardPlusIcon :size="20" />
 										</template>
-										{{ t('deck_recurrence', 'Create card now') }}
+										{{ rule.mode === 'reset' ? t('deck_recurrence', 'Reset card now') : t('deck_recurrence', 'Create card now') }}
 									</NcActionButton>
 									<NcActionButton @click="openEditor(rule)">
 										<template #icon>
@@ -213,7 +213,9 @@ export default {
 		async spawnNow(rule) {
 			try {
 				const card = await api.spawnRule(rule.id)
-				showSuccess(t('deck_recurrence', 'Card "{title}" created', { title: card.title }))
+				showSuccess(rule.mode === 'reset'
+					? t('deck_recurrence', 'Card "{title}" reset', { title: card.title })
+					: t('deck_recurrence', 'Card "{title}" created', { title: card.title }))
 			} catch (e) {
 				console.error(e)
 				showError(e.response?.data?.message ?? t('deck_recurrence', 'Could not create the card'))
