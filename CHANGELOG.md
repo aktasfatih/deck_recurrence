@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.2 – unreleased
+## 0.4.3 – unreleased
 
 ### Fixed
 
