@@ -96,6 +96,25 @@ export async function cardsInStack(boardId, stackTitle) {
 	return (stack?.cards ?? []).sort((a, b) => a.id - b.id)
 }
 
+/** Call the app's OCS API as a client would (basic auth, no session).
+ * Returns status and unwrapped payload instead of throwing, so error
+ * responses can be asserted. */
+export async function ocs(method, path, body) {
+	const url = `${BASE}/ocs/v2.php/apps/deck_recurrence${path}${path.includes('?') ? '&' : '?'}format=json`
+	const response = await fetch(url, {
+		method,
+		headers: {
+			Authorization: AUTH,
+			'OCS-APIRequest': 'true',
+			'Content-Type': 'application/json',
+			Accept: 'application/json',
+		},
+		body: body === undefined ? undefined : JSON.stringify(body),
+	})
+	const json = await response.json().catch(() => null)
+	return { status: response.status, data: json?.ocs?.data ?? null, message: json?.ocs?.meta?.message ?? null }
+}
+
 export const notifications = {
 	list: async () => (await api('GET', '/ocs/v2.php/apps/notifications/api/v2/notifications?format=json')).ocs.data,
 	clear: () => api('DELETE', '/ocs/v2.php/apps/notifications/api/v2/notifications?format=json'),

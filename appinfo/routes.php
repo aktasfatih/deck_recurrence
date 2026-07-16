@@ -14,4 +14,12 @@ return [
 		['name' => 'rule#spawn', 'url' => '/rules/{id}/spawn', 'verb' => 'POST'],
 		['name' => 'rule#destroy', 'url' => '/rules/{id}', 'verb' => 'DELETE'],
 	],
+	'ocs' => [
+		['name' => 'rule_api#index', 'url' => '/api/v1/rules', 'verb' => 'GET'],
+		['name' => 'rule_api#create', 'url' => '/api/v1/rules', 'verb' => 'POST'],
+		['name' => 'rule_api#show', 'url' => '/api/v1/rules/{id}', 'verb' => 'GET'],
+		['name' => 'rule_api#update', 'url' => '/api/v1/rules/{id}', 'verb' => 'PUT'],
+		['name' => 'rule_api#destroy', 'url' => '/api/v1/rules/{id}', 'verb' => 'DELETE'],
+		['name' => 'rule_api#spawn', 'url' => '/api/v1/rules/{id}/spawn', 'verb' => 'POST'],
+	],
 ];

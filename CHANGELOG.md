@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 – unreleased
+
+### Added
+
+- OCS API for scripts and integrations (app-password friendly):
+  full rule CRUD plus on-demand spawn under
+  `/ocs/v2.php/apps/deck_recurrence/api/v1/rules`
+- Rule logic extracted into a shared service used by both the web UI
+  and the OCS API, with a consistent error contract
+
 ## 0.4.4 – unreleased
 
 ### Added

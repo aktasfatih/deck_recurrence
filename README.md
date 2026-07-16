@@ -57,6 +57,34 @@ occ background-job:list --class 'OCA\DeckRecurrence\Cron\SpawnRecurringCards'
 occ background-job:execute <job-id> --force-execute
 ```
 
+## OCS API
+
+Rules can be managed by scripts and integrations via OCS (works with
+[app passwords](https://docs.nextcloud.com/server/latest/user_manual/en/session_management.html)):
+
+```
+GET    /ocs/v2.php/apps/deck_recurrence/api/v1/rules
+POST   /ocs/v2.php/apps/deck_recurrence/api/v1/rules
+GET    /ocs/v2.php/apps/deck_recurrence/api/v1/rules/{id}
+PUT    /ocs/v2.php/apps/deck_recurrence/api/v1/rules/{id}
+DELETE /ocs/v2.php/apps/deck_recurrence/api/v1/rules/{id}
+POST   /ocs/v2.php/apps/deck_recurrence/api/v1/rules/{id}/spawn
+```
+
+Rule fields: `templateCardId`, `targetStackId`, `rrule` (RFC 5545),
+`dtstart` (unix timestamp of the first occurrence), `enabled`,
+`skipIfOpen`, `resetCheckboxes`, `mode` (`clone` or `reset`).
+
+```bash
+curl -u user:app-password -H 'OCS-APIRequest: true' \
+  -H 'Content-Type: application/json' \
+  -X POST 'https://cloud.example.com/ocs/v2.php/apps/deck_recurrence/api/v1/rules?format=json' \
+  -d '{"templateCardId": 42, "targetStackId": 7, "rrule": "FREQ=WEEKLY;BYDAY=MO", "dtstart": 1789000000}'
+```
+
+`POST .../rules/{id}/spawn` creates (or, in reset mode, resets) the
+card immediately, ignoring the schedule.
+
 ## License
 
 AGPL-3.0-or-later
