@@ -99,12 +99,12 @@ export async function cardsInStack(boardId, stackTitle) {
 /** Call the app's OCS API as a client would (basic auth, no session).
  * Returns status and unwrapped payload instead of throwing, so error
  * responses can be asserted. */
-export async function ocs(method, path, body) {
+export async function ocs(method, path, body, auth = 'admin:admin') {
 	const url = `${BASE}/ocs/v2.php/apps/deck_recurrence${path}${path.includes('?') ? '&' : '?'}format=json`
 	const response = await fetch(url, {
 		method,
 		headers: {
-			Authorization: AUTH,
+			Authorization: 'Basic ' + Buffer.from(auth).toString('base64'),
 			'OCS-APIRequest': 'true',
 			'Content-Type': 'application/json',
 			Accept: 'application/json',
