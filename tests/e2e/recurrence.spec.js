@@ -154,10 +154,16 @@ test('edit a rule through the editor', async ({ page }) => {
 	// stable once it validates and Save becomes clickable.
 	await expect(page.getByRole('button', { name: 'Save' })).toBeEnabled()
 	await page.locator('.rule-editor__frequency .rule-editor__number').fill('2')
+	await page.getByText('On date', { exact: true }).click()
+	await page.locator('#rule-editor-until').fill('2026-12-31')
 	await page.getByRole('button', { name: 'Save' }).click()
 
 	await expect(row(page, 'Clean the bathroom')).toContainText('Every 2 weeks')
-	expect(sql("SELECT rrule FROM oc_deck_rec_rules WHERE mode = 'clone'")).toBe('FREQ=WEEKLY;INTERVAL=2;BYDAY=MO')
+	await expect(row(page, 'Clean the bathroom')).toContainText('until')
+	// End-of-picked-day is expressed in UTC, so the date part depends on
+	// the browser's timezone; assert the shape, not the exact day.
+	const rrule = sql("SELECT rrule FROM oc_deck_rec_rules WHERE mode = 'clone'")
+	expect(rrule).toMatch(/^FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;UNTIL=\d{8}T\d{6}Z$/)
 })
 
 test('the active switch pauses and resumes a rule', async ({ page }) => {
