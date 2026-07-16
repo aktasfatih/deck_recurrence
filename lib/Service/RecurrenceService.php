@@ -17,6 +17,9 @@ use OCA\Deck\Db\StackMapper;
 use OCA\Deck\Service\PermissionService;
 use OCA\DeckRecurrence\Db\RecurrenceRule;
 use OCA\DeckRecurrence\Db\RecurrenceRuleMapper;
+use OCA\DeckRecurrence\Db\RecurrenceSpawn;
+use OCA\DeckRecurrence\Db\RecurrenceSpawnMapper;
+use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 use Sabre\VObject\Recur\RRuleIterator;
@@ -24,6 +27,7 @@ use Sabre\VObject\Recur\RRuleIterator;
 class RecurrenceService {
 	public function __construct(
 		private RecurrenceRuleMapper $ruleMapper,
+		private RecurrenceSpawnMapper $spawnMapper,
 		private CardMapper $cardMapper,
 		private StackMapper $stackMapper,
 		private LabelMapper $labelMapper,
@@ -61,10 +65,22 @@ class RecurrenceService {
 	 * Permission checks run as the rule's owner, so revoked board access
 	 * disables spawning naturally.
 	 *
+	 * Returns the created card, or null when the rule is configured to wait
+	 * for the previous card and that card is still open.
+	 *
 	 * @throws \OCA\Deck\NoPermissionException
 	 * @throws \OCP\AppFramework\Db\DoesNotExistException
 	 */
-	public function spawn(RecurrenceRule $rule): void {
+	public function spawn(RecurrenceRule $rule): ?Card {
+		if ($rule->getSkipIfOpen()) {
+			$latest = $this->spawnMapper->findLatestForRule($rule->getId());
+			if ($latest !== null && $this->isCardOpen($latest->getCardId())) {
+				$this->logger->info('Deck Recurrence: rule ' . $rule->getId()
+					. ' skipped, card ' . $latest->getCardId() . ' is still open');
+				return null;
+			}
+		}
+
 		$this->permissionService->setUserId($rule->getUserId());
 		$this->permissionService->checkPermission($this->cardMapper, $rule->getTemplateCardId(), Acl::PERMISSION_READ, $rule->getUserId());
 		$this->permissionService->checkPermission($this->stackMapper, $rule->getTargetStackId(), Acl::PERMISSION_EDIT, $rule->getUserId());
@@ -93,6 +109,12 @@ class RecurrenceService {
 
 		$this->changeHelper->cardChanged($card->getId());
 
+		$spawnRecord = new RecurrenceSpawn();
+		$spawnRecord->setRuleId($rule->getId());
+		$spawnRecord->setCardId($card->getId());
+		$spawnRecord->setSpawnedAt(time());
+		$this->spawnMapper->insert($spawnRecord);
+
 		try {
 			$this->activityManager->triggerEvent(
 				ActivityManager::DECK_OBJECT_CARD,
@@ -106,6 +128,23 @@ class RecurrenceService {
 				'exception' => $e,
 			]);
 		}
+
+		return $card;
+	}
+
+	/**
+	 * A card counts as open while it exists, is not marked done,
+	 * and is neither archived nor deleted.
+	 */
+	private function isCardOpen(int $cardId): bool {
+		try {
+			$card = $this->cardMapper->find($cardId);
+		} catch (DoesNotExistException $e) {
+			return false;
+		}
+		return $card->getDone() === null
+			&& !$card->getArchived()
+			&& (int)$card->getDeletedAt() === 0;
 	}
 
 	/**
@@ -117,8 +156,9 @@ class RecurrenceService {
 		$now = time();
 		foreach ($this->ruleMapper->findDue($now) as $rule) {
 			try {
-				$this->spawn($rule);
-				$rule->setLastRun($now);
+				if ($this->spawn($rule) !== null) {
+					$rule->setLastRun($now);
+				}
 			} catch (\Throwable $e) {
 				$this->logger->warning('Deck Recurrence: could not spawn card for rule ' . $rule->getId(), [
 					'exception' => $e,

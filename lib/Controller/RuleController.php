@@ -14,6 +14,7 @@ use OCA\Deck\NoPermissionException;
 use OCA\Deck\Service\PermissionService;
 use OCA\DeckRecurrence\Db\RecurrenceRule;
 use OCA\DeckRecurrence\Db\RecurrenceRuleMapper;
+use OCA\DeckRecurrence\Db\RecurrenceSpawnMapper;
 use OCA\DeckRecurrence\Service\RecurrenceService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
@@ -27,6 +28,7 @@ class RuleController extends Controller {
 		string $appName,
 		IRequest $request,
 		private RecurrenceRuleMapper $ruleMapper,
+		private RecurrenceSpawnMapper $spawnMapper,
 		private RecurrenceService $recurrenceService,
 		private PermissionService $permissionService,
 		private CardMapper $cardMapper,
@@ -42,7 +44,7 @@ class RuleController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	public function create(int $templateCardId, int $targetStackId, string $rrule, int $dtstart): JSONResponse {
+	public function create(int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $skipIfOpen = false): JSONResponse {
 		$error = $this->validate($templateCardId, $targetStackId);
 		if ($error !== null) {
 			return $error;
@@ -55,6 +57,7 @@ class RuleController extends Controller {
 		$rule->setRrule(trim($rrule));
 		$rule->setDtstart($dtstart);
 		$rule->setEnabled(true);
+		$rule->setSkipIfOpen($skipIfOpen);
 		$rule->setCreatedAt(time());
 
 		try {
@@ -70,7 +73,7 @@ class RuleController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	public function update(int $id, int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $enabled): JSONResponse {
+	public function update(int $id, int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $enabled, bool $skipIfOpen = false): JSONResponse {
 		try {
 			$rule = $this->ruleMapper->find($id, $this->userId);
 		} catch (DoesNotExistException $e) {
@@ -87,6 +90,7 @@ class RuleController extends Controller {
 		$rule->setRrule(trim($rrule));
 		$rule->setDtstart($dtstart);
 		$rule->setEnabled($enabled);
+		$rule->setSkipIfOpen($skipIfOpen);
 
 		try {
 			$rule->setNextRun($enabled
@@ -106,6 +110,7 @@ class RuleController extends Controller {
 		} catch (DoesNotExistException $e) {
 			return new JSONResponse(['message' => 'Rule not found'], Http::STATUS_NOT_FOUND);
 		}
+		$this->spawnMapper->deleteForRule($rule->getId());
 		return new JSONResponse($this->ruleMapper->delete($rule));
 	}
 

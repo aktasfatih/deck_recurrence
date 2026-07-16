@@ -26,6 +26,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setLastRun(?int $lastRun)
  * @method bool getEnabled()
  * @method void setEnabled(bool $enabled)
+ * @method bool getSkipIfOpen()
+ * @method void setSkipIfOpen(bool $skipIfOpen)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  */
@@ -38,6 +40,7 @@ class RecurrenceRule extends Entity implements \JsonSerializable {
 	protected ?int $nextRun = null;
 	protected ?int $lastRun = null;
 	protected bool $enabled = true;
+	protected bool $skipIfOpen = false;
 	protected int $createdAt = 0;
 
 	public function __construct() {
@@ -47,6 +50,7 @@ class RecurrenceRule extends Entity implements \JsonSerializable {
 		$this->addType('nextRun', 'integer');
 		$this->addType('lastRun', 'integer');
 		$this->addType('enabled', 'boolean');
+		$this->addType('skipIfOpen', 'boolean');
 		$this->addType('createdAt', 'integer');
 	}
 
@@ -60,6 +64,7 @@ class RecurrenceRule extends Entity implements \JsonSerializable {
 			'nextRun' => $this->getNextRun(),
 			'lastRun' => $this->getLastRun(),
 			'enabled' => $this->getEnabled(),
+			'skipIfOpen' => $this->getSkipIfOpen(),
 		];
 	}
 }

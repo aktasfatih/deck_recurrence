@@ -57,6 +57,39 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 				</div>
 			</template>
 
+			<label>{{ t('deck_recurrence', 'Ends') }}</label>
+			<div class="rule-editor__ends">
+				<NcCheckboxRadioSwitch v-model="ends" value="never" name="ends" type="radio">
+					{{ t('deck_recurrence', 'Never') }}
+				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch v-model="ends" value="until" name="ends" type="radio">
+					{{ t('deck_recurrence', 'On date') }}
+				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch v-model="ends" value="count" name="ends" type="radio">
+					{{ t('deck_recurrence', 'After') }}
+				</NcCheckboxRadioSwitch>
+				<NcDateTimePickerNative v-if="ends === 'until'"
+					id="rule-editor-until"
+					v-model="until"
+					type="date"
+					:label="t('deck_recurrence', 'Last day')"
+					:hide-label="true" />
+				<div v-if="ends === 'count'" class="rule-editor__count">
+					<NcTextField v-model="count"
+						type="number"
+						min="1"
+						class="rule-editor__interval"
+						:label="t('deck_recurrence', 'Occurrences')"
+						:show-label="false" />
+					<span>{{ t('deck_recurrence', 'occurrences') }}</span>
+				</div>
+			</div>
+
+			<label>{{ t('deck_recurrence', 'Options') }}</label>
+			<NcCheckboxRadioSwitch v-model="skipIfOpen">
+				{{ t('deck_recurrence', 'Only create a new card when the previous one is done, archived or deleted') }}
+			</NcCheckboxRadioSwitch>
+
 			<label for="rule-editor-first">{{ t('deck_recurrence', 'First occurrence') }}</label>
 			<NcDateTimePickerNative id="rule-editor-first"
 				v-model="firstOccurrence"
@@ -123,6 +156,10 @@ export default {
 			frequency: null,
 			interval: '1',
 			weekdays: [],
+			ends: 'never',
+			until: null,
+			count: '10',
+			skipIfOpen: false,
 			firstOccurrence: new Date(),
 			saving: false,
 			frequencyOptions: [
@@ -143,6 +180,8 @@ export default {
 				&& parseInt(this.interval, 10) >= 1
 				&& this.firstOccurrence instanceof Date
 				&& (this.frequency?.id !== 'WEEKLY' || this.weekdays.length > 0)
+				&& (this.ends !== 'until' || this.until instanceof Date)
+				&& (this.ends !== 'count' || parseInt(this.count, 10) >= 1)
 		},
 	},
 	async created() {
@@ -152,6 +191,14 @@ export default {
 			this.frequency = this.frequencyOptions.find((f) => f.id === parsed.frequency) ?? this.frequencyOptions[1]
 			this.interval = String(parsed.interval)
 			this.weekdays = parsed.weekdays
+			if (parsed.count) {
+				this.ends = 'count'
+				this.count = String(parsed.count)
+			} else if (parsed.until) {
+				this.ends = 'until'
+				this.until = parsed.until
+			}
+			this.skipIfOpen = this.rule.skipIfOpen ?? false
 			this.firstOccurrence = new Date(this.rule.dtstart * 1000)
 			await this.preselectFromRule()
 		}
@@ -204,8 +251,11 @@ export default {
 						frequency: this.frequency.id,
 						interval: parseInt(this.interval, 10),
 						weekdays: this.weekdays,
+						count: this.ends === 'count' ? parseInt(this.count, 10) : null,
+						until: this.ends === 'until' ? this.until : null,
 					}),
 					dtstart: Math.floor(this.firstOccurrence.getTime() / 1000),
+					skipIfOpen: this.skipIfOpen,
 				}
 				const saved = this.rule
 					? await api.updateRule({ ...payload, id: this.rule.id, enabled: this.rule.enabled })
@@ -249,6 +299,19 @@ export default {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0 12px;
+}
+
+.rule-editor__ends {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 12px;
+}
+
+.rule-editor__count {
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 
 .rule-editor__hint {
