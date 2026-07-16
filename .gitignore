@@ -7,3 +7,5 @@ deploy/inventory.yml
 test-results/
 playwright-report/
 .playwright-mcp/
+vendor/
+.phpunit.result.cache

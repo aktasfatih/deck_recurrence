@@ -18,6 +18,19 @@ jobs:
       - name: PHP syntax check
         run: find lib appinfo templates -name '*.php' -print0 | xargs -0 -n1 php -l
 
+  unit-php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+      - name: Run unit tests
+        run: vendor/bin/phpunit -c phpunit.xml
+
   e2e:
     runs-on: ubuntu-latest
     steps:

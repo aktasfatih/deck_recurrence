@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { expect, test } from '@playwright/test'
 import {
+	addUser,
 	cardsInStack,
 	deck,
 	login,
 	makeRuleDue,
 	notifications,
+	occ,
 	resetState,
 	runSpawnJob,
 	sql,
@@ -18,6 +20,7 @@ let boardId
 let trashCardId
 let waterCardId
 let weeklyStackId
+let doneStackId
 
 test.beforeAll(async () => {
 	await resetState()
@@ -27,6 +30,7 @@ test.beforeAll(async () => {
 	const weekly = await deck.createStack(boardId, 'Weekly', 2)
 	weeklyStackId = weekly.id
 	const done = await deck.createStack(boardId, 'Done', 3)
+	doneStackId = done.id
 
 	const template = await deck.createCard(boardId, templates.id, {
 		title: 'Clean the bathroom',
@@ -50,12 +54,15 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
-	// Leave the dev instance clean: no rules pointing at deleted state
-	sql('DELETE FROM oc_deck_rec_spawns')
-	sql('DELETE FROM oc_deck_rec_rules')
-	await notifications.clear()
+	// Leave the dev instance clean: no rules pointing at deleted state.
+	// Each step is tolerant so a test failing mid-schema-change does not
+	// mask its own error with a cleanup crash.
+	const attempt = (fn) => { try { fn() } catch (e) { /* table may not exist */ } }
+	attempt(() => sql('DELETE FROM oc_deck_rec_spawns'))
+	attempt(() => sql('DELETE FROM oc_deck_rec_rules'))
+	await notifications.clear().catch(() => {})
 	if (boardId) {
-		await deck.deleteBoard(boardId)
+		await deck.deleteBoard(boardId).catch(() => {})
 	}
 })
 
@@ -204,6 +211,24 @@ test('reset card now clears done state without touching the due date', async ({ 
 	expect(sql(`SELECT duedate FROM oc_deck_cards WHERE id = ${trashCardId}`)).toBe(dueBefore)
 })
 
+test('editing a reset rule preserves its mode and card', async ({ page }) => {
+	await row(page, 'Take out trash').getByRole('button', { name: 'Actions' }).click()
+	await page.getByRole('menuitem', { name: 'Edit' }).click()
+
+	await expect(page.getByRole('radio', { name: 'Move the same card back' })).toBeChecked()
+	await expect(page.getByRole('button', { name: 'Save' })).toBeEnabled()
+	await expect(page.getByRole('dialog')).toContainText('Take out trash')
+
+	await page.getByText('Uncheck all checklist items on the new card').click()
+	await page.getByRole('button', { name: 'Save' }).click()
+
+	// Saving keeps the mode, card and target while applying the change
+	await expect(row(page, 'Take out trash')).toContainText('E2E Chores / Weekly')
+	expect(sql(`SELECT mode FROM oc_deck_rec_rules WHERE template_card_id = ${trashCardId}`)).toBe('reset')
+	expect(sql(`SELECT reset_checkboxes FROM oc_deck_rec_rules WHERE template_card_id = ${trashCardId}`)).toBe('t')
+	expect(sql(`SELECT target_stack_id FROM oc_deck_rec_rules WHERE template_card_id = ${trashCardId}`)).toBe(String(weeklyStackId))
+})
+
 test('a count end condition disables the rule after its last occurrence', async ({ page }) => {
 	await page.getByRole('button', { name: 'New rule' }).click()
 	await page.getByRole('combobox', { name: 'Select a board' }).click()
@@ -277,4 +302,68 @@ test('deleting rules through the UI empties the list', async ({ page }) => {
 	await expect(page.getByText('No recurring cards yet')).toBeVisible()
 	expect(sql('SELECT count(*) FROM oc_deck_rec_rules')).toBe('0')
 	expect(sql('SELECT count(*) FROM oc_deck_rec_spawns')).toBe('0')
+})
+
+test('migrations replay cleanly from the 0.1.0 schema', async () => {
+	// Rewind the app's schema and recorded state to the first release
+	sql("DELETE FROM oc_migrations WHERE app = 'deck_recurrence' AND version <> '010000Date20260715080000'")
+	sql('DROP TABLE oc_deck_rec_spawns')
+	sql('ALTER TABLE oc_deck_rec_rules DROP COLUMN skip_if_open, DROP COLUMN reset_checkboxes, DROP COLUMN mode')
+	occ('config:app:set deck_recurrence installed_version --value 0.1.0')
+	sql(`INSERT INTO oc_deck_rec_rules (user_id, template_card_id, target_stack_id, rrule, dtstart, next_run, enabled, created_at) VALUES ('admin', ${waterCardId}, ${weeklyStackId}, 'FREQ=DAILY', extract(epoch from now())::bigint - 86400, extract(epoch from now())::bigint - 60, true, extract(epoch from now())::bigint)`)
+
+	occ('app:disable deck_recurrence')
+	occ('app:enable deck_recurrence')
+
+	expect(sql("SELECT count(*) FROM information_schema.columns WHERE table_name = 'oc_deck_rec_rules' AND column_name IN ('skip_if_open', 'reset_checkboxes', 'mode')")).toBe('3')
+	expect(sql("SELECT count(*) FROM information_schema.tables WHERE table_name = 'oc_deck_rec_spawns'")).toBe('1')
+	// The pre-upgrade rule survives and gets sane defaults
+	expect(sql('SELECT mode FROM oc_deck_rec_rules')).toBe('clone')
+	expect(sql('SELECT skip_if_open FROM oc_deck_rec_rules')).toBe('f')
+
+	// ...and it still spawns
+	runSpawnJob()
+	expect(sql('SELECT count(*) FROM oc_deck_rec_spawns')).toBe('1')
+	sql('DELETE FROM oc_deck_rec_rules')
+	sql('DELETE FROM oc_deck_rec_spawns')
+})
+
+test('a shared-board rule runs as its owner and fails safely when access is revoked', async ({ browser }) => {
+	addUser('bob', 'BobSecret2026!')
+	const acl = await deck.shareBoard(boardId, 'bob')
+
+	const context = await browser.newContext()
+	const bobPage = await context.newPage()
+	await login(bobPage, 'bob', 'BobSecret2026!')
+	await bobPage.goto('http://localhost:8890/apps/deck_recurrence/')
+
+	await bobPage.getByRole('button', { name: 'New rule' }).click()
+	await bobPage.getByRole('combobox', { name: 'Select a board' }).click()
+	await bobPage.locator('[role="option"]').filter({ hasText: 'E2E Chores' }).click()
+	await bobPage.getByRole('combobox', { name: 'Card to copy each time' }).click()
+	await bobPage.locator('[role="option"]').filter({ hasText: 'Clean the bathroom' }).first().click()
+	await bobPage.getByRole('combobox', { name: 'Select a stack' }).click()
+	await bobPage.locator('[role="option"]').filter({ hasText: 'Weekly' }).click()
+	await bobPage.getByText('Monday', { exact: true }).click()
+	await bobPage.getByRole('button', { name: 'Create' }).click()
+	await expect(bobPage.getByRole('row').filter({ hasText: 'Clean the bathroom' })).toBeVisible()
+	await context.close()
+
+	// The job spawns on behalf of bob
+	const before = (await cardsInStack(boardId, 'Weekly')).length
+	makeRuleDue("WHERE user_id = 'bob'")
+	runSpawnJob()
+	const cards = await cardsInStack(boardId, 'Weekly')
+	expect(cards).toHaveLength(before + 1)
+	expect(cards[cards.length - 1].owner.uid ?? cards[cards.length - 1].owner).toBe('bob')
+
+	// After access is revoked the rule fails safely and notifies bob
+	await deck.unshareBoard(boardId, acl.id)
+	makeRuleDue("WHERE user_id = 'bob'")
+	runSpawnJob()
+	expect(await cardsInStack(boardId, 'Weekly')).toHaveLength(before + 1)
+	expect(sql("SELECT count(*) FROM oc_notifications WHERE \"user\" = 'bob' AND app = 'deck_recurrence'")).toBe('1')
+
+	sql("DELETE FROM oc_deck_rec_rules WHERE user_id = 'bob'")
+	sql("DELETE FROM oc_notifications WHERE \"user\" = 'bob'")
 })

@@ -1,0 +1,24 @@
+{
+	"name": "aktasfatih/deck_recurrence",
+	"description": "Recurring cards for Nextcloud Deck",
+	"license": "AGPL-3.0-or-later",
+	"config": {
+		"platform": {
+			"php": "8.2"
+		}
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^10.5",
+		"nextcloud/ocp": "^32.0",
+		"sabre/vobject": "^4.5"
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"OCA\\DeckRecurrence\\": "lib/",
+			"OCP\\": "vendor/nextcloud/ocp/OCP"
+		}
+	},
+	"scripts": {
+		"test:unit": "phpunit -c phpunit.xml"
+	}
+}

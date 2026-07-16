@@ -11,6 +11,20 @@ export function occ(args) {
 	return execSync(`docker exec -u www-data ${NC} php occ ${args}`, { encoding: 'utf8' })
 }
 
+export function addUser(name, password) {
+	try {
+		execSync(
+			`docker exec -e OC_PASS=${password} -u www-data ${NC} php occ user:add --password-from-env ${name}`,
+			{ encoding: 'utf8', stdio: 'pipe' },
+		)
+	} catch (e) {
+		const output = String(e.stdout ?? '') + String(e.stderr ?? '')
+		if (!output.includes('already exists')) {
+			throw e
+		}
+	}
+}
+
 export function sql(query) {
 	return execSync(
 		`docker exec ${DB} psql -U nextcloud -d nextcloud -t -A -c ${JSON.stringify(query)}`,
@@ -64,6 +78,16 @@ export const deck = {
 	assignLabel: (boardId, stackId, cardId, labelId) =>
 		api('PUT', `/index.php/apps/deck/api/v1.0/boards/${boardId}/stacks/${stackId}/cards/${cardId}/assignLabel`, { labelId }),
 	listStacks: (boardId) => api('GET', `/index.php/apps/deck/api/v1.0/boards/${boardId}/stacks`),
+	shareBoard: (boardId, userId) =>
+		api('POST', `/index.php/apps/deck/api/v1.0/boards/${boardId}/acl`, {
+			type: 0,
+			participant: userId,
+			permissionEdit: true,
+			permissionShare: false,
+			permissionManage: false,
+		}),
+	unshareBoard: (boardId, aclId) =>
+		api('DELETE', `/index.php/apps/deck/api/v1.0/boards/${boardId}/acl/${aclId}`),
 }
 
 export async function cardsInStack(boardId, stackTitle) {
@@ -77,10 +101,18 @@ export const notifications = {
 	clear: () => api('DELETE', '/ocs/v2.php/apps/notifications/api/v2/notifications?format=json'),
 }
 
-/** Remove app data and boards left over from previous runs. */
+/** Remove app data and boards left over from previous runs. A failed
+ * migration-replay run may have left the schema rewound, so replay the
+ * app's migrations first and tolerate missing tables. */
 export async function resetState() {
-	sql('DELETE FROM oc_deck_rec_spawns')
-	sql('DELETE FROM oc_deck_rec_rules')
+	try {
+		occ('app:enable deck_recurrence')
+	} catch (e) { /* already enabled */ }
+	for (const table of ['oc_deck_rec_spawns', 'oc_deck_rec_rules']) {
+		try {
+			sql(`DELETE FROM ${table}`)
+		} catch (e) { /* table missing until migrations replay */ }
+	}
 	await notifications.clear()
 	for (const board of await deck.listBoards()) {
 		if (board.title.startsWith('E2E ') && !board.deletedAt) {
@@ -89,10 +121,10 @@ export async function resetState() {
 	}
 }
 
-export async function login(page) {
-	await page.goto('/login')
-	await page.locator('input[name="user"]').fill('admin')
-	await page.locator('input[name="password"]').fill('admin')
+export async function login(page, user = 'admin', password = 'admin') {
+	await page.goto('http://localhost:8890/login')
+	await page.locator('input[name="user"]').fill(user)
+	await page.locator('input[name="password"]').fill(password)
 	await page.locator('button[type="submit"]').click()
 	await page.waitForURL('**/apps/**')
 }
