@@ -157,7 +157,8 @@ export default {
 		try {
 			const [rules, boards] = await Promise.all([api.listRules(), api.listBoards()])
 			this.rules = rules
-			this.boards = boards
+			// Deck's board list includes soft-deleted boards
+			this.boards = boards.filter((board) => !board.deletedAt)
 			await this.indexDeckEntities()
 		} catch (e) {
 			console.error(e)

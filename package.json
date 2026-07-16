@@ -9,7 +9,8 @@
     "build": "vite build --mode production",
     "dev": "vite build --mode development",
     "watch": "vite build --mode development --watch",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@nextcloud/axios": "^2.5.0",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@nextcloud/vite-config": "^2.2.0",
+    "@playwright/test": "^1.61.1",
     "typescript": "~5.9",
     "vite": "^7.0.0"
   },

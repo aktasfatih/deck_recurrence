@@ -4,3 +4,6 @@ css/
 *.tar.gz
 .DS_Store
 deploy/inventory.yml
+test-results/
+playwright-report/
+.playwright-mcp/
