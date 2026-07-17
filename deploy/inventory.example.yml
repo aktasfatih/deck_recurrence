@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Fatih AKTAS <akfatih2@gmail.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Copy to inventory.yml (gitignored) and fill in your own values.
 all:
   children:
     nextcloud:
       hosts:
-        your-server:   # SSH host (alias from ~/.ssh/config) running the Nextcloud docker-compose stack
+        your-server:   # SSH host (alias from ~/.ssh/config) running Nextcloud
+          nextcloud_container: your-nextcloud-container   # docker container name

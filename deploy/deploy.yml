@@ -25,7 +25,7 @@
     controller_build_dir: "{{ lookup('env', 'HOME') }}/builds/{{ app_id }}"
     controller_stage_dir: "{{ lookup('env', 'HOME') }}/builds/{{ app_id }}-dist"
     remote_stage_dir: "builds/{{ app_id }}-dist"
-    nextcloud_container: your-nextcloud-container
+    # nextcloud_container is defined per host in the inventory
 
   tasks:
     - name: Check out application source on the controller
