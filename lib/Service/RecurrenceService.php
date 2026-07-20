@@ -69,9 +69,21 @@ class RecurrenceService {
 	}
 
 	/**
+	 * Due date for a card spawned at $occurrence, honoring the rule's
+	 * dueOffset: null for DUE_NONE, otherwise occurrence + offset.
+	 */
+	public function dueDateFor(RecurrenceRule $rule, int $occurrence): ?\DateTime {
+		if ($rule->getDueOffset() === RecurrenceRule::DUE_NONE) {
+			return null;
+		}
+		return new \DateTime('@' . ($occurrence + $rule->getDueOffset()));
+	}
+
+	/**
 	 * Copy the rule's template card into its target stack. Scheduled spawns
-	 * get the occurrence time as due date; manual spawns ("create now") get
-	 * no due date and ignore the skip-if-open setting.
+	 * get a due date derived from the occurrence time and the rule's due
+	 * offset; manual spawns ("create now") get no due date and ignore the
+	 * skip-if-open setting.
 	 *
 	 * The copy is done through Deck's mappers rather than
 	 * CardService::cloneCard() because Deck's service layer assumes a
@@ -119,8 +131,7 @@ class RecurrenceService {
 		$card->setOwner($rule->getUserId());
 		$card->setDescription($description);
 		if (!$manual) {
-			$occurrence = $rule->getNextRun() ?? time();
-			$card->setDuedate(new \DateTime('@' . $occurrence));
+			$card->setDuedate($this->dueDateFor($rule, $rule->getNextRun() ?? time()));
 		}
 		$card = $this->cardMapper->insert($card);
 
@@ -198,7 +209,7 @@ class RecurrenceService {
 			$card->setDescription($this->uncheckAll($card->getDescription()));
 		}
 		if (!$manual) {
-			$card->setDuedate(new \DateTime('@' . ($rule->getNextRun() ?? time())));
+			$card->setDuedate($this->dueDateFor($rule, $rule->getNextRun() ?? time()));
 			$card->setNotified(false);
 		}
 		$card = $this->cardMapper->update($card);

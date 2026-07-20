@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Fatih AKTAS <akfatih2@gmail.com>
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { expect, test } from '@playwright/test'
-import { cardsInStack, deck, ocs, resetState, sql } from './helpers.js'
+import { cardsInStack, deck, makeRuleDue, ocs, resetState, runSpawnJob, sql } from './helpers.js'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -85,6 +85,36 @@ test('spawns a card on demand', async () => {
 	expect(cards[0].duedate).toBeNull()
 })
 
+test('due offset shifts or suppresses the spawned card due date', async () => {
+	const week = 7 * 86400
+	const base = {
+		templateCardId: cardId,
+		targetStackId: stackId,
+		rrule: 'FREQ=DAILY',
+		dtstart: Math.floor(Date.now() / 1000),
+	}
+	const offsetRule = await ocs('POST', '/api/v1/rules', { ...base, dueOffset: week })
+	expect(offsetRule.status).toBe(200)
+	expect(offsetRule.data.dueOffset).toBe(week)
+	const noDueRule = await ocs('POST', '/api/v1/rules', { ...base, dueOffset: -1 })
+	expect(noDueRule.status).toBe(200)
+	expect(noDueRule.data.dueOffset).toBe(-1)
+
+	makeRuleDue(`WHERE id IN (${offsetRule.data.id}, ${noDueRule.data.id})`)
+	runSpawnJob()
+
+	// The two newest cards in the target stack are this test's spawns
+	const spawned = (await cardsInStack(boardId, 'Target')).slice(-2)
+	const withDue = spawned.filter((c) => c.duedate !== null)
+	expect(withDue).toHaveLength(1)
+	// Occurrence was forced to now - 60s, so due ≈ one week from now
+	const expected = Date.now() + week * 1000
+	expect(Math.abs(new Date(withDue[0].duedate).getTime() - expected)).toBeLessThan(600_000)
+
+	await ocs('DELETE', `/api/v1/rules/${offsetRule.data.id}`)
+	await ocs('DELETE', `/api/v1/rules/${noDueRule.data.id}`)
+})
+
 test('rejects invalid input with proper status codes', async () => {
 	const badRrule = await ocs('POST', '/api/v1/rules', {
 		templateCardId: cardId,
@@ -102,6 +132,15 @@ test('rejects invalid input with proper status codes', async () => {
 		mode: 'bogus',
 	})
 	expect(badMode.status).toBe(400)
+
+	const badDueOffset = await ocs('POST', '/api/v1/rules', {
+		templateCardId: cardId,
+		targetStackId: stackId,
+		rrule: 'FREQ=DAILY',
+		dtstart: Math.floor(Date.now() / 1000),
+		dueOffset: -5,
+	})
+	expect(badDueOffset.status).toBe(400)
 
 	const missingRule = await ocs('GET', '/api/v1/rules/999999')
 	expect(missingRule.status).toBe(404)

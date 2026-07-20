@@ -47,16 +47,16 @@ class RuleApiController extends OCSController {
 	}
 
 	#[NoAdminRequired]
-	public function create(int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $skipIfOpen = false, bool $resetCheckboxes = false, string $mode = RecurrenceRule::MODE_CLONE): DataResponse {
+	public function create(int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $skipIfOpen = false, bool $resetCheckboxes = false, string $mode = RecurrenceRule::MODE_CLONE, int $dueOffset = 0): DataResponse {
 		return $this->respond(fn () => $this->ruleService->create(
-			$this->userId, $templateCardId, $targetStackId, $rrule, $dtstart, $skipIfOpen, $resetCheckboxes, $mode,
+			$this->userId, $templateCardId, $targetStackId, $rrule, $dtstart, $skipIfOpen, $resetCheckboxes, $mode, $dueOffset,
 		));
 	}
 
 	#[NoAdminRequired]
-	public function update(int $id, int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $enabled, bool $skipIfOpen = false, bool $resetCheckboxes = false, string $mode = RecurrenceRule::MODE_CLONE): DataResponse {
+	public function update(int $id, int $templateCardId, int $targetStackId, string $rrule, int $dtstart, bool $enabled, bool $skipIfOpen = false, bool $resetCheckboxes = false, string $mode = RecurrenceRule::MODE_CLONE, int $dueOffset = 0): DataResponse {
 		return $this->respond(fn () => $this->ruleService->update(
-			$id, $this->userId, $templateCardId, $targetStackId, $rrule, $dtstart, $enabled, $skipIfOpen, $resetCheckboxes, $mode,
+			$id, $this->userId, $templateCardId, $targetStackId, $rrule, $dtstart, $enabled, $skipIfOpen, $resetCheckboxes, $mode, $dueOffset,
 		));
 	}
 

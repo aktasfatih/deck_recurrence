@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 – unreleased
+
+### Added
+
+- Configurable due date for spawned cards: at the occurrence time (as
+  before), a delay after it (for example one week later), or no due
+  date at all — per rule, in the editor and the OCS API (`dueOffset`
+  in seconds, `-1` for none)
+
 ## 0.5.1 – unreleased
 
 ### Fixed

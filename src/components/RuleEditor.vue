@@ -93,6 +93,31 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 				</div>
 			</div>
 
+			<label>{{ t('deck_recurrence', 'Due date') }}</label>
+			<div class="rule-editor__ends">
+				<NcCheckboxRadioSwitch v-model="dueMode" value="occurrence" name="dueMode" type="radio">
+					{{ t('deck_recurrence', 'At the occurrence time') }}
+				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch v-model="dueMode" value="offset" name="dueMode" type="radio">
+					{{ t('deck_recurrence', 'Later') }}
+				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch v-model="dueMode" value="none" name="dueMode" type="radio">
+					{{ t('deck_recurrence', 'No due date') }}
+				</NcCheckboxRadioSwitch>
+			</div>
+			<div v-if="dueMode === 'offset'" class="rule-editor__count">
+				<input v-model="dueAmount"
+					type="number"
+					min="1"
+					class="rule-editor__number"
+					:aria-label="t('deck_recurrence', 'Due date delay')">
+				<NcSelect v-model="dueUnit"
+					:options="dueUnitOptions"
+					label="label"
+					:clearable="false" />
+				<span>{{ t('deck_recurrence', 'after the occurrence') }}</span>
+			</div>
+
 			<label>{{ t('deck_recurrence', 'Options') }}</label>
 			<NcCheckboxRadioSwitch v-if="mode === 'clone'" v-model="skipIfOpen">
 				{{ t('deck_recurrence', 'Only create a new card when the previous one is done, archived or deleted') }}
@@ -108,7 +133,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 				:label="t('deck_recurrence', 'First occurrence')"
 				:hide-label="true" />
 			<p class="rule-editor__hint">
-				{{ t('deck_recurrence', 'Cards are created at the occurrence time and get it as their due date. The template card itself is never modified.') }}
+				{{ t('deck_recurrence', 'Cards are created at the occurrence time. The template card itself is never modified.') }}
 			</p>
 		</div>
 
@@ -171,6 +196,9 @@ export default {
 			count: '10',
 			skipIfOpen: false,
 			resetCheckboxes: false,
+			dueMode: 'occurrence',
+			dueAmount: '1',
+			dueUnit: null,
 			firstOccurrence: new Date(),
 			saving: false,
 			frequencyOptions: [
@@ -178,6 +206,11 @@ export default {
 				{ id: 'WEEKLY', label: t('deck_recurrence', 'week(s)') },
 				{ id: 'MONTHLY', label: t('deck_recurrence', 'month(s)') },
 				{ id: 'YEARLY', label: t('deck_recurrence', 'year(s)') },
+			],
+			dueUnitOptions: [
+				{ seconds: 3600, label: t('deck_recurrence', 'hour(s)') },
+				{ seconds: 86400, label: t('deck_recurrence', 'day(s)') },
+				{ seconds: 604800, label: t('deck_recurrence', 'week(s)') },
 			],
 		}
 	},
@@ -193,10 +226,12 @@ export default {
 				&& (this.frequency?.id !== 'WEEKLY' || this.weekdays.length > 0)
 				&& (this.ends !== 'until' || this.until instanceof Date)
 				&& (this.ends !== 'count' || parseInt(this.count, 10) >= 1)
+				&& (this.dueMode !== 'offset' || parseInt(this.dueAmount, 10) >= 1)
 		},
 	},
 	async created() {
 		this.frequency = this.frequencyOptions[1]
+		this.dueUnit = this.dueUnitOptions[1]
 		if (this.rule) {
 			const parsed = parseRrule(this.rule.rrule)
 			this.frequency = this.frequencyOptions.find((f) => f.id === parsed.frequency) ?? this.frequencyOptions[1]
@@ -212,6 +247,7 @@ export default {
 			this.mode = this.rule.mode ?? 'clone'
 			this.skipIfOpen = this.rule.skipIfOpen ?? false
 			this.resetCheckboxes = this.rule.resetCheckboxes ?? false
+			this.applyDueOffset(this.rule.dueOffset ?? 0)
 			this.firstOccurrence = new Date(this.rule.dtstart * 1000)
 			await this.preselectFromRule()
 		}
@@ -254,6 +290,32 @@ export default {
 				? [...this.weekdays, id]
 				: this.weekdays.filter((d) => d !== id)
 		},
+		applyDueOffset(offset) {
+			if (offset === -1) {
+				this.dueMode = 'none'
+				return
+			}
+			if (offset === 0) {
+				this.dueMode = 'occurrence'
+				return
+			}
+			this.dueMode = 'offset'
+			// Largest unit that fits evenly; rules created over the OCS API
+			// with an odd offset fall back to (rounded, at least one) hours.
+			const unit = [...this.dueUnitOptions].reverse().find((u) => offset % u.seconds === 0)
+				?? this.dueUnitOptions[0]
+			this.dueUnit = unit
+			this.dueAmount = String(Math.max(1, Math.round(offset / unit.seconds)))
+		},
+		dueOffsetPayload() {
+			if (this.dueMode === 'none') {
+				return -1
+			}
+			if (this.dueMode === 'occurrence') {
+				return 0
+			}
+			return parseInt(this.dueAmount, 10) * this.dueUnit.seconds
+		},
 		async save() {
 			this.saving = true
 			try {
@@ -271,6 +333,7 @@ export default {
 					skipIfOpen: this.mode === 'clone' && this.skipIfOpen,
 					resetCheckboxes: this.resetCheckboxes,
 					mode: this.mode,
+					dueOffset: this.dueOffsetPayload(),
 				}
 				const saved = this.rule
 					? await api.updateRule({ ...payload, id: this.rule.id, enabled: this.rule.enabled })

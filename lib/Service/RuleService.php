@@ -58,8 +58,9 @@ class RuleService {
 		bool $skipIfOpen,
 		bool $resetCheckboxes,
 		string $mode,
+		int $dueOffset,
 	): RecurrenceRule {
-		$this->validate($templateCardId, $targetStackId, $mode);
+		$this->validate($templateCardId, $targetStackId, $mode, $dueOffset);
 
 		$rule = new RecurrenceRule();
 		$rule->setUserId($userId);
@@ -71,6 +72,7 @@ class RuleService {
 		$rule->setSkipIfOpen($skipIfOpen);
 		$rule->setResetCheckboxes($resetCheckboxes);
 		$rule->setMode($mode);
+		$rule->setDueOffset($dueOffset);
 		$rule->setCreatedAt(time());
 
 		$next = $this->nextOccurrence($rule);
@@ -93,9 +95,10 @@ class RuleService {
 		bool $skipIfOpen,
 		bool $resetCheckboxes,
 		string $mode,
+		int $dueOffset,
 	): RecurrenceRule {
 		$rule = $this->find($id, $userId);
-		$this->validate($templateCardId, $targetStackId, $mode);
+		$this->validate($templateCardId, $targetStackId, $mode, $dueOffset);
 
 		$rule->setTemplateCardId($templateCardId);
 		$rule->setTargetStackId($targetStackId);
@@ -105,6 +108,7 @@ class RuleService {
 		$rule->setSkipIfOpen($skipIfOpen);
 		$rule->setResetCheckboxes($resetCheckboxes);
 		$rule->setMode($mode);
+		$rule->setDueOffset($dueOffset);
 		$rule->setNextRun($enabled ? $this->nextOccurrence($rule) : null);
 
 		return $this->ruleMapper->update($rule);
@@ -140,9 +144,16 @@ class RuleService {
 		}
 	}
 
-	private function validate(int $templateCardId, int $targetStackId, string $mode): void {
+	/** Ten years, far beyond any sensible spawn-to-deadline distance */
+	private const MAX_DUE_OFFSET = 315360000;
+
+	private function validate(int $templateCardId, int $targetStackId, string $mode, int $dueOffset): void {
 		if (!in_array($mode, [RecurrenceRule::MODE_CLONE, RecurrenceRule::MODE_RESET], true)) {
 			throw new \InvalidArgumentException('Invalid rule mode');
+		}
+		if ($dueOffset !== RecurrenceRule::DUE_NONE
+			&& ($dueOffset < 0 || $dueOffset > self::MAX_DUE_OFFSET)) {
+			throw new \InvalidArgumentException('Invalid due date offset');
 		}
 		// Reset mode rewrites the card itself, so it needs edit rights on it
 		$cardPermission = $mode === RecurrenceRule::MODE_RESET ? Acl::PERMISSION_EDIT : Acl::PERMISSION_READ;

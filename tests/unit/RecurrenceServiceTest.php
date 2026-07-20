@@ -129,6 +129,30 @@ class RecurrenceServiceTest extends TestCase {
 		$this->service()->nextOccurrence($rule, new \DateTimeImmutable('2026-07-10 00:00:00'));
 	}
 
+	public function testDueDateDefaultsToTheOccurrenceTime(): void {
+		$rule = $this->rule('FREQ=DAILY', new \DateTimeImmutable('2026-07-01 10:00:00'));
+
+		$due = $this->service()->dueDateFor($rule, 1780000000);
+
+		$this->assertSame(1780000000, $due->getTimestamp());
+	}
+
+	public function testDueDateHonorsTheOffset(): void {
+		$rule = $this->rule('FREQ=DAILY', new \DateTimeImmutable('2026-07-01 10:00:00'));
+		$rule->setDueOffset(7 * 86400);
+
+		$due = $this->service()->dueDateFor($rule, 1780000000);
+
+		$this->assertSame(1780000000 + 7 * 86400, $due->getTimestamp());
+	}
+
+	public function testDueNoneYieldsNoDueDate(): void {
+		$rule = $this->rule('FREQ=DAILY', new \DateTimeImmutable('2026-07-01 10:00:00'));
+		$rule->setDueOffset(RecurrenceRule::DUE_NONE);
+
+		$this->assertNull($this->service()->dueDateFor($rule, 1780000000));
+	}
+
 	public function testInvalidTimezonePreferenceFallsBackToServerDefault(): void {
 		$dtstart = new \DateTimeImmutable('2026-07-01 10:00:00', new \DateTimeZone('UTC'));
 		$rule = $this->rule('FREQ=DAILY', $dtstart);
