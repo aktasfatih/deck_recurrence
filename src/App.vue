@@ -82,11 +82,79 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 					</tbody>
 				</table>
 
+				<template v-if="deckEnabled && !loading">
+					<div class="deck-recurrence__header deck-recurrence__section">
+						<h2>{{ t('deck_recurrence', 'Auto-archive') }}</h2>
+						<NcButton variant="primary" @click="openArchiveEditor()">
+							<template #icon>
+								<PlusIcon :size="20" />
+							</template>
+							{{ t('deck_recurrence', 'New auto-archive rule') }}
+						</NcButton>
+					</div>
+
+					<p v-if="archiveRules.length === 0" class="deck-recurrence__hint">
+						{{ t('deck_recurrence', 'No auto-archive rules yet. Create one to archive done cards automatically once they are old enough.') }}
+					</p>
+
+					<table v-else class="deck-recurrence__table">
+						<thead>
+							<tr>
+								<th>{{ t('deck_recurrence', 'Where') }}</th>
+								<th>{{ t('deck_recurrence', 'Archives') }}</th>
+								<th>{{ t('deck_recurrence', 'Last run') }}</th>
+								<th>{{ t('deck_recurrence', 'Active') }}</th>
+								<th />
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="rule in archiveRules" :key="'archive-' + rule.id">
+								<td>{{ archiveWhere(rule) }}</td>
+								<td>{{ describeArchiveRule(rule) }}</td>
+								<td>{{ rule.lastRun ? formatDate(rule.lastRun) : '—' }}</td>
+								<td>
+									<NcCheckboxRadioSwitch :model-value="rule.enabled"
+										type="switch"
+										@update:model-value="toggleArchiveRule(rule, $event)" />
+								</td>
+								<td class="deck-recurrence__actions">
+									<NcActions>
+										<NcActionButton :close-after-click="true" @click="runArchiveNow(rule)">
+											<template #icon>
+												<ArchiveIcon :size="20" />
+											</template>
+											{{ t('deck_recurrence', 'Archive now') }}
+										</NcActionButton>
+										<NcActionButton @click="openArchiveEditor(rule)">
+											<template #icon>
+												<PencilIcon :size="20" />
+											</template>
+											{{ t('deck_recurrence', 'Edit') }}
+										</NcActionButton>
+										<NcActionButton @click="removeArchiveRule(rule)">
+											<template #icon>
+												<DeleteIcon :size="20" />
+											</template>
+											{{ t('deck_recurrence', 'Delete') }}
+										</NcActionButton>
+									</NcActions>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</template>
+
 				<RuleEditor v-if="editorOpen"
 					:rule="editingRule"
 					:boards="boards"
 					@saved="onSaved"
 					@close="editorOpen = false" />
+
+				<ArchiveRuleEditor v-if="archiveEditorOpen"
+					:rule="editingArchiveRule"
+					:boards="boards"
+					@saved="onArchiveSaved"
+					@close="archiveEditorOpen = false" />
 			</div>
 		</NcAppContent>
 	</NcContent>
@@ -104,11 +172,13 @@ import NcContent from '@nextcloud/vue/components/NcContent'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import AlertIcon from 'vue-material-design-icons/Alert.vue'
+import ArchiveIcon from 'vue-material-design-icons/Archive.vue'
 import CardPlusIcon from 'vue-material-design-icons/CardPlus.vue'
 import DeleteIcon from 'vue-material-design-icons/Delete.vue'
 import PencilIcon from 'vue-material-design-icons/Pencil.vue'
 import PlusIcon from 'vue-material-design-icons/Plus.vue'
 import RepeatIcon from 'vue-material-design-icons/Repeat.vue'
+import ArchiveRuleEditor from './components/ArchiveRuleEditor.vue'
 import RuleEditor from './components/RuleEditor.vue'
 import api from './services/api.js'
 import { describeRrule } from './services/rrule.js'
@@ -117,6 +187,8 @@ export default {
 	name: 'App',
 	components: {
 		AlertIcon,
+		ArchiveIcon,
+		ArchiveRuleEditor,
 		CardPlusIcon,
 		DeleteIcon,
 		NcActionButton,
@@ -142,11 +214,14 @@ export default {
 		return {
 			loading: true,
 			rules: [],
+			archiveRules: [],
 			boards: [],
 			stacksById: {},
 			cardsById: {},
 			editorOpen: false,
 			editingRule: null,
+			archiveEditorOpen: false,
+			editingArchiveRule: null,
 		}
 	},
 	async mounted() {
@@ -155,8 +230,13 @@ export default {
 			return
 		}
 		try {
-			const [rules, boards] = await Promise.all([api.listRules(), api.listBoards()])
+			const [rules, archiveRules, boards] = await Promise.all([
+				api.listRules(),
+				api.listArchiveRules(),
+				api.listBoards(),
+			])
 			this.rules = rules
+			this.archiveRules = archiveRules
 			// Deck's board list includes soft-deleted boards
 			this.boards = boards.filter((board) => !board.deletedAt)
 			await this.indexDeckEntities()
@@ -239,6 +319,71 @@ export default {
 				showError(t('deck_recurrence', 'Could not delete the rule'))
 			}
 		},
+		boardTitle(boardId) {
+			return this.boards.find((b) => b.id === boardId)?.title
+				?? t('deck_recurrence', 'Board #{id}', { id: boardId })
+		},
+		archiveWhere(rule) {
+			return rule.stackId
+				? this.stackTitle(rule.stackId)
+				: t('deck_recurrence', '{board} (all stacks)', { board: this.boardTitle(rule.boardId) })
+		},
+		describeArchiveRule(rule) {
+			const duration = this.humanDuration(rule.threshold)
+			return rule.mode === 'min_age'
+				? t('deck_recurrence', 'Done cards created {duration} ago or more', { duration })
+				: t('deck_recurrence', 'Cards done for {duration} or more', { duration })
+		},
+		humanDuration(seconds) {
+			const units = [
+				[604800, t('deck_recurrence', 'week(s)')],
+				[86400, t('deck_recurrence', 'day(s)')],
+				[3600, t('deck_recurrence', 'hour(s)')],
+			]
+			const [size, label] = units.find(([size]) => seconds % size === 0) ?? units[2]
+			return `${Math.max(1, Math.round(seconds / size))} ${label}`
+		},
+		openArchiveEditor(rule = null) {
+			this.editingArchiveRule = rule
+			this.archiveEditorOpen = true
+		},
+		onArchiveSaved(rule) {
+			const index = this.archiveRules.findIndex((r) => r.id === rule.id)
+			if (index >= 0) {
+				this.archiveRules.splice(index, 1, rule)
+			} else {
+				this.archiveRules.unshift(rule)
+			}
+			this.archiveEditorOpen = false
+		},
+		async runArchiveNow(rule) {
+			try {
+				const { archived } = await api.runArchiveRule(rule.id)
+				showSuccess(t('deck_recurrence', '{count} card(s) archived', { count: archived }))
+				this.archiveRules = await api.listArchiveRules()
+			} catch (e) {
+				console.error(e)
+				showError(e.response?.data?.message ?? t('deck_recurrence', 'Could not archive cards'))
+			}
+		},
+		async toggleArchiveRule(rule, enabled) {
+			try {
+				const updated = await api.updateArchiveRule({ ...rule, enabled })
+				this.archiveRules.splice(this.archiveRules.indexOf(rule), 1, updated)
+			} catch (e) {
+				console.error(e)
+				showError(t('deck_recurrence', 'Could not update the rule'))
+			}
+		},
+		async removeArchiveRule(rule) {
+			try {
+				await api.deleteArchiveRule(rule.id)
+				this.archiveRules = this.archiveRules.filter((r) => r.id !== rule.id)
+			} catch (e) {
+				console.error(e)
+				showError(t('deck_recurrence', 'Could not delete the rule'))
+			}
+		},
 	},
 }
 </script>
@@ -275,5 +420,13 @@ export default {
 
 .deck-recurrence__actions {
 	width: 44px;
+}
+
+.deck-recurrence__section {
+	margin-top: 40px;
+}
+
+.deck-recurrence__hint {
+	color: var(--color-text-maxcontrast);
 }
 </style>

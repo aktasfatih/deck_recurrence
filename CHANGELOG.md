@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 – unreleased
+
+### Added
+
+- Auto-archive rules: archive done cards automatically once they have
+  been done for a chosen time (for example five days), or once they
+  reach a certain age — per board or scoped to a single stack, with an
+  "Archive now" manual sweep, failure notifications, and a full OCS API
+  under `/api/v1/archive-rules`
+
 ## 0.6.0 – unreleased
 
 ### Added

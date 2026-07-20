@@ -4,6 +4,7 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 
 const rulesUrl = (path = '') => generateUrl('/apps/deck_recurrence/rules' + path)
+const archiveRulesUrl = (path = '') => generateUrl('/apps/deck_recurrence/archive-rules' + path)
 const deckUrl = (path) => generateUrl('/apps/deck/api/v1.0' + path)
 const deckHeaders = { 'OCS-APIRequest': 'true' }
 
@@ -22,6 +23,22 @@ export default {
 	},
 	async spawnRule(id) {
 		return (await axios.post(rulesUrl('/' + id + '/spawn'))).data
+	},
+
+	async listArchiveRules() {
+		return (await axios.get(archiveRulesUrl())).data
+	},
+	async createArchiveRule(rule) {
+		return (await axios.post(archiveRulesUrl(), rule)).data
+	},
+	async updateArchiveRule(rule) {
+		return (await axios.put(archiveRulesUrl('/' + rule.id), rule)).data
+	},
+	async deleteArchiveRule(id) {
+		return (await axios.delete(archiveRulesUrl('/' + id))).data
+	},
+	async runArchiveRule(id) {
+		return (await axios.post(archiveRulesUrl('/' + id + '/run'))).data
 	},
 
 	async listBoards() {

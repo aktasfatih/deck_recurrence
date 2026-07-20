@@ -31,13 +31,18 @@ class Notifier implements INotifier {
 
 	public function prepare(INotification $notification, string $languageCode): INotification {
 		if ($notification->getApp() !== Application::APP_ID
-			|| $notification->getSubject() !== 'spawn_failed') {
+			|| !in_array($notification->getSubject(), ['spawn_failed', 'archive_failed'], true)) {
 			throw new UnknownNotificationException();
 		}
 
 		$l = $this->l10nFactory->get(Application::APP_ID, $languageCode);
-		$notification->setParsedSubject($l->t('A recurring card could not be created'));
-		$notification->setParsedMessage($l->t('One of your recurrence rules failed, for example because its template card was deleted or you lost access to the board. Open Deck Recurrence to review it.'));
+		if ($notification->getSubject() === 'archive_failed') {
+			$notification->setParsedSubject($l->t('Cards could not be archived automatically'));
+			$notification->setParsedMessage($l->t('One of your auto-archive rules failed, for example because its board was deleted or you lost access to it. Open Deck Recurrence to review it.'));
+		} else {
+			$notification->setParsedSubject($l->t('A recurring card could not be created'));
+			$notification->setParsedMessage($l->t('One of your recurrence rules failed, for example because its template card was deleted or you lost access to the board. Open Deck Recurrence to review it.'));
+		}
 		$notification->setLink($this->urlGenerator->linkToRouteAbsolute(Application::APP_ID . '.page.index'));
 		$notification->setIcon($this->urlGenerator->getAbsoluteURL(
 			$this->urlGenerator->imagePath(Application::APP_ID, 'app.svg'),

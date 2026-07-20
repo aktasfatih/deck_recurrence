@@ -32,13 +32,21 @@ export function sql(query) {
 	).trim()
 }
 
-export function runSpawnJob() {
-	const list = occ("background-job:list --class 'OCA\\DeckRecurrence\\Cron\\SpawnRecurringCards'")
+function runJob(className) {
+	const list = occ(`background-job:list --class '${className}'`)
 	const id = list.match(/^\|\s*(\d+)/m)?.[1]
 	if (!id) {
-		throw new Error('spawn job not registered')
+		throw new Error(`${className} job not registered`)
 	}
 	occ(`background-job:execute ${id} --force-execute`)
+}
+
+export function runSpawnJob() {
+	runJob('OCA\\DeckRecurrence\\Cron\\SpawnRecurringCards')
+}
+
+export function runArchiveJob() {
+	runJob('OCA\\DeckRecurrence\\Cron\\ArchiveDoneCards')
 }
 
 export function makeRuleDue(extra = '') {
@@ -127,7 +135,7 @@ export async function resetState() {
 	try {
 		occ('app:enable deck_recurrence')
 	} catch (e) { /* already enabled */ }
-	for (const table of ['oc_deck_rec_spawns', 'oc_deck_rec_rules']) {
+	for (const table of ['oc_deck_rec_spawns', 'oc_deck_rec_rules', 'oc_deck_rec_arch_rules']) {
 		try {
 			sql(`DELETE FROM ${table}`)
 		} catch (e) { /* table missing until migrations replay */ }

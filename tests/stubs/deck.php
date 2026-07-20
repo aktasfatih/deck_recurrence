@@ -45,5 +45,6 @@ namespace OCA\Deck\Activity {
 	class ActivityManager {
 		public const DECK_OBJECT_CARD = 'deckCard';
 		public const SUBJECT_CARD_CREATE = 'card_create';
+		public const SUBJECT_CARD_UPDATE_ARCHIVE = 'card_update_archive';
 	}
 }

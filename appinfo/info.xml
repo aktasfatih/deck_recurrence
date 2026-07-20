@@ -12,10 +12,13 @@ spawned card's due date is configurable: at the occurrence time, a delay after
 it (for example one week later), or none at all. Labels, assignees and the
 description are carried over from the template.
 
+Auto-archive rules keep boards tidy: archive done cards automatically once
+they have been done for a while (for example five days), or once they reach a
+certain age — per board or per stack.
 
 Requires the Deck app to be installed and enabled.
 	]]></description>
-	<version>0.6.0</version>
+	<version>0.7.0</version>
 	<licence>agpl</licence>
 	<author mail="akfatih2@gmail.com">Fatih AKTAS</author>
 	<namespace>DeckRecurrence</namespace>
@@ -27,6 +30,7 @@ Requires the Deck app to be installed and enabled.
 	</dependencies>
 	<background-jobs>
 		<job>OCA\DeckRecurrence\Cron\SpawnRecurringCards</job>
+		<job>OCA\DeckRecurrence\Cron\ArchiveDoneCards</job>
 	</background-jobs>
 	<navigations>
 		<navigation>
